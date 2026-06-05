@@ -133,9 +133,11 @@ function Install-Dependencies {
 }
 
 function Get-PackageRoot {
-  $localAdapter = Join-Path $PSScriptRoot "adapter"
-  if ($PSScriptRoot -and (Test-Path (Join-Path $localAdapter "package.json"))) {
-    return $PSScriptRoot
+  if ($PSScriptRoot -and $PSScriptRoot.Trim()) {
+    $localAdapter = Join-Path $PSScriptRoot "adapter"
+    if (Test-Path -LiteralPath (Join-Path $localAdapter "package.json")) {
+      return $PSScriptRoot
+    }
   }
 
   Write-Step "Baixando pacote do GitHub"
