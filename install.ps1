@@ -258,13 +258,23 @@ function Configure-ClaudeCode($AdapterKey) {
   $settings | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
 }
 
+function Get-NodePath {
+  $nodePath = (Get-Command "node" -ErrorAction SilentlyContinue).Source
+  if (-not $nodePath -or -not $nodePath.Trim()) {
+    throw "Node.js nao encontrado no PATH."
+  }
+  return $nodePath
+}
+
 function Write-StartScript {
   $startPath = Join-Path $InstallDir "start-adapter.ps1"
   $escapedInstallDir = $InstallDir.Replace("'", "''")
+  $nodePath = Get-NodePath
+  $escapedNodePath = $nodePath.Replace("'", "''")
   $content = @"
 `$ErrorActionPreference = "Stop"
 Set-Location -LiteralPath '$escapedInstallDir'
-& node src/server.js
+& '$escapedNodePath' src/server.js
 "@
   Set-Content -LiteralPath $startPath -Value $content -Encoding UTF8
   return $startPath
@@ -288,15 +298,15 @@ function Configure-Autostart($StartScript) {
   }
 
   Write-Step "Configurando inicio automatico"
-  $argument = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$StartScript`""
-  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $argument
+  $nodePath = Get-NodePath
+  $action = New-ScheduledTaskAction -Execute $nodePath -Argument "src/server.js" -WorkingDirectory $InstallDir
   $trigger = New-ScheduledTaskTrigger -AtLogOn
   try {
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Description "Inicia o adaptador local DGSIS Claude Code" -Force | Out-Null
     Remove-StartupLauncher
   } catch {
     Write-Host "Agendador bloqueado pelo Windows. Usando Inicializar do usuario." -ForegroundColor Yellow
-    Write-StartupLauncher $StartScript | Out-Null
+    Write-StartupLauncher | Out-Null
   }
 }
 
@@ -320,12 +330,15 @@ function Remove-StartupLauncher {
   }
 }
 
-function Write-StartupLauncher($StartScript) {
+function Write-StartupLauncher {
   $launcherPath = Get-StartupLauncherPath
-  $escapedStartScript = $StartScript.Replace('"', '""')
+  $nodePath = Get-NodePath
+  $escapedInstallDir = $InstallDir.Replace('"', '""')
+  $escapedNodePath = $nodePath.Replace('"', '""')
   $content = @"
 Set shell = CreateObject("WScript.Shell")
-shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$escapedStartScript""", 0, False
+shell.CurrentDirectory = "$escapedInstallDir"
+shell.Run """$escapedNodePath"" src/server.js", 0, False
 "@
   Set-Content -LiteralPath $launcherPath -Value $content -Encoding ASCII
   return $launcherPath
@@ -334,7 +347,7 @@ shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden
 function Start-AdapterNow($StartScript) {
   Write-Step "Iniciando adaptador"
   Stop-AdapterOnPort
-  Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", $StartScript) -WindowStyle Hidden | Out-Null
+  Start-Process -FilePath (Get-NodePath) -ArgumentList @("src/server.js") -WorkingDirectory $InstallDir -WindowStyle Hidden | Out-Null
 }
 
 function Wait-Health {
