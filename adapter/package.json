@@ -1,0 +1,13 @@
+{
+  "name": "abc-claude-adapter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Adaptador local Anthropic Messages API para API OpenAI-compatible.",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
