@@ -291,7 +291,44 @@ function Configure-Autostart($StartScript) {
   $argument = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$StartScript`""
   $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $argument
   $trigger = New-ScheduledTaskTrigger -AtLogOn
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Description "Inicia o adaptador local DGSIS Claude Code" -Force | Out-Null
+  try {
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Description "Inicia o adaptador local DGSIS Claude Code" -Force | Out-Null
+    Remove-StartupLauncher
+  } catch {
+    Write-Host "Agendador bloqueado pelo Windows. Usando Inicializar do usuario." -ForegroundColor Yellow
+    Write-StartupLauncher $StartScript | Out-Null
+  }
+}
+
+function Get-StartupFolder {
+  $startup = [Environment]::GetFolderPath("Startup")
+  if (-not $startup -or -not $startup.Trim()) {
+    $startup = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
+  }
+  New-Item -ItemType Directory -Force -Path $startup | Out-Null
+  return $startup
+}
+
+function Get-StartupLauncherPath {
+  return (Join-Path (Get-StartupFolder) "DGSIS Claude Adapter.vbs")
+}
+
+function Remove-StartupLauncher {
+  $launcherPath = Get-StartupLauncherPath
+  if (Test-Path -LiteralPath $launcherPath) {
+    Remove-Item -LiteralPath $launcherPath -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Write-StartupLauncher($StartScript) {
+  $launcherPath = Get-StartupLauncherPath
+  $escapedStartScript = $StartScript.Replace('"', '""')
+  $content = @"
+Set shell = CreateObject("WScript.Shell")
+shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$escapedStartScript""", 0, False
+"@
+  Set-Content -LiteralPath $launcherPath -Value $content -Encoding ASCII
+  return $launcherPath
 }
 
 function Start-AdapterNow($StartScript) {
