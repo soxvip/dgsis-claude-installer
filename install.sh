@@ -6,7 +6,6 @@ BASE_URL="https://gtw.dgsis.com.br/v1"
 PORT="8792"
 SKIP_DEPS=0
 NO_AUTOSTART=0
-INSTALL_CODEX_CLI=0
 SELF_TEST_ONLY=0
 REPO_ZIP_URL="https://github.com/soxvip/dgsis-claude-installer/archive/refs/heads/main.zip"
 INSTALL_DIR="$HOME/.dgsis/claude-code-proxy"
@@ -19,7 +18,6 @@ while [ "$#" -gt 0 ]; do
     --port) PORT="${2:-}"; shift 2 ;;
     --skip-deps) SKIP_DEPS=1; shift ;;
     --no-autostart) NO_AUTOSTART=1; shift ;;
-    --install-codex-cli) INSTALL_CODEX_CLI=1; shift ;;
     --self-test-only) SELF_TEST_ONLY=1; shift ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
@@ -79,10 +77,6 @@ install_deps(){
   npm install -g @anthropic-ai/claude-code
   need claude || fail "claude nao encontrado apos npm install."
   ok "$(claude --version)"
-  if [ "$INSTALL_CODEX_CLI" -eq 1 ]; then
-    step "Instalando OpenAI Codex CLI opcional"
-    curl -fsSL https://chatgpt.com/codex/install.sh | sh
-  fi
 }
 
 package_root(){

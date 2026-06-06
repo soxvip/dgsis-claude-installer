@@ -104,6 +104,8 @@ gpt-5.5
 cx/gpt-5.5
 ```
 
+`codex-5-5` e `gpt-5.5` sao aliases de modelo usados dentro do Claude Code. Este processo instala somente Claude Code.
+
 ## Se Der Erro
 
 1. Confirmar token com cliente.
@@ -147,4 +149,4 @@ macOS:
 - Nunca usar token de exemplo.
 - Nunca postar token no chat final.
 - Se Gemini aparecer como modelo, nao usar Gemini real. O proxy redireciona Gemini manual para `cx/gpt-5.5` por estabilidade.
-- Se o cliente pedir Codex/VS Code, seguir [VSCODE-CODEX-GUIDE.md](VSCODE-CODEX-GUIDE.md).
+- Este processo e somente para Claude Code (`claude`).

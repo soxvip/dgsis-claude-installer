@@ -4,7 +4,6 @@ param(
   [int]$Port = 8792,
   [switch]$SkipDependencyInstall,
   [switch]$NoAutoStart,
-  [switch]$InstallCodexCli,
   [switch]$SelfTestOnly
 )
 
@@ -58,7 +57,6 @@ function InstallDeps {
   RefreshPath
   if(-not (Has claude)){ throw "claude nao encontrado apos npm install." }
   Ok (& claude --version)
-  if($InstallCodexCli){ Step "Instalando OpenAI Codex CLI opcional"; Invoke-Expression (Invoke-RestMethod -Uri "https://chatgpt.com/codex/install.ps1" -TimeoutSec 60); RefreshPath }
 }
 
 function PackageRoot {

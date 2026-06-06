@@ -12,6 +12,7 @@ gemini manual       -> cx/gpt-5.5
 ```
 
 Gemini real e Haiku ficam ocultos por padrao porque falharam testes de estabilidade/conformidade.
+`codex-5-5` e `gpt-5.5` sao apenas aliases de modelo usados dentro do Claude Code. Este pacote instala somente Claude Code.
 
 ## Windows
 
@@ -80,26 +81,6 @@ Health do proxy:
 curl http://127.0.0.1:8792/health
 ```
 
-## Instalacao Opcional Do OpenAI Codex CLI
-
-O fluxo DGSIS testado neste repositorio usa Claude Code (`claude`).
-
-Se o cliente tambem quiser OpenAI Codex CLI oficial, use:
-
-Windows:
-
-```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.ps1))) -InstallCodexCli
-```
-
-macOS:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.sh | bash -s -- --install-codex-cli
-```
-
-Leia tambem [VSCODE-CODEX-GUIDE.md](VSCODE-CODEX-GUIDE.md).
-
 ## Reexecutar
 
 Pode rodar de novo para trocar token, atualizar proxy ou corrigir configuracao. Backups de `settings.json` ficam em `~/.claude/backups`.
@@ -111,4 +92,3 @@ Nunca coloque token real em GitHub, README ou print publico. Cada cliente deve u
 ## Guias
 
 - [AI-INSTALLER-GUIDE.md](AI-INSTALLER-GUIDE.md): prompt/instrucoes para uma IA instalar para o cliente.
-- [VSCODE-CODEX-GUIDE.md](VSCODE-CODEX-GUIDE.md): instalar VS Code e Codex IDE Extension.
