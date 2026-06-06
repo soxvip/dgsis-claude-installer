@@ -1,409 +1,158 @@
 param(
-  [string]$ConfigPath = "",
-  [string]$ConfigJson = "",
+  [string]$Token = "",
+  [string]$BaseUrl = "https://gtw.dgsis.com.br/v1",
+  [int]$Port = 8792,
   [switch]$SkipDependencyInstall,
-  [switch]$NoAutoStart
+  [switch]$NoAutoStart,
+  [switch]$InstallCodexCli,
+  [switch]$SelfTestOnly
 )
 
 $ErrorActionPreference = "Stop"
-
 $RepositoryZipUrl = "https://github.com/soxvip/dgsis-claude-installer/archive/refs/heads/main.zip"
-$InstallRoot = Join-Path $env:LOCALAPPDATA "DGSIS"
-$InstallDir = Join-Path $InstallRoot "claude-adapter"
-$Port = 8791
-$TaskName = "DGSIS Claude Adapter"
+$InstallDir = Join-Path $env:LOCALAPPDATA "DGSIS\claude-code-proxy"
+$TaskName = "DGSIS Claude Code Proxy"
+$DefaultModel = "claude-opus-4-8"
 
-function Write-Step($Message) {
-  Write-Host ""
-  Write-Host "==> $Message" -ForegroundColor Cyan
+function Step($m){ Write-Host ""; Write-Host "==> $m" -ForegroundColor Cyan }
+function Ok($m){ Write-Host "OK: $m" -ForegroundColor Green }
+function Has($c){ return $null -ne (Get-Command $c -ErrorAction SilentlyContinue) }
+function RefreshPath { $env:Path = ([Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")) }
+function Plain($s){ $b=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); try{[Runtime.InteropServices.Marshal]::PtrToStringBSTR($b)}finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b)} }
+function NodeMajor { if(-not (Has node)){0}else{ [int]((& node -v).Trim().TrimStart('v').Split('.')[0]) } }
+
+function GetToken {
+  if($Token.Trim()){ return $Token.Trim() }
+  $t = Plain (Read-Host -AsSecureString -Prompt "Cole o token DGSIS deste cliente")
+  if(-not $t -or $t.Trim().Length -lt 10){ throw "Token vazio ou curto demais." }
+  return $t.Trim()
 }
 
-function Test-Command($Name) {
-  return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
+function ValidateBaseUrl {
+  $script:BaseUrl = $BaseUrl.TrimEnd('/')
+  if(-not ($script:BaseUrl.StartsWith('https://') -or $script:BaseUrl.StartsWith('http://'))){ throw "BaseUrl invalida: $BaseUrl" }
 }
 
-function Refresh-Path {
-  $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-  $env:Path = "$machinePath;$userPath"
+function ValidateToken($t){
+  Step "Validando token e modelos DGSIS"
+  $r = Invoke-RestMethod -Uri "$BaseUrl/models" -Headers @{Authorization="Bearer $t"} -TimeoutSec 30
+  $ids = @($r.data | ForEach-Object { $_.id })
+  foreach($m in @('kr/claude-opus-4.8','kr/claude-sonnet-4.6','cx/gpt-5.5')){ if($ids -notcontains $m){ throw "Token sem acesso a $m" } }
+  Ok "token valido"
 }
 
-function Convert-ClientConfig($Text) {
-  if (-not $Text -or -not $Text.Trim()) {
-    throw "Configuracao vazia. Informe JSON com api e token."
-  }
-
-  try {
-    $json = $Text | ConvertFrom-Json
-    $api = Get-FirstPropertyValue $json @("api", "base_url", "baseUrl", "url")
-    $token = Get-FirstPropertyValue $json @("token", "api_key", "apiKey", "key")
-    if ($api -and $token) {
-      return [pscustomobject]@{ Api = $api.Trim().TrimEnd("/"); Token = $token.Trim() }
-    }
-  } catch {
-    # Se nao for JSON, tenta formato "API: ..." e "Token: ...".
-  }
-
-  $apiMatch = [regex]::Match($Text, "(?im)^\s*API\s*:\s*(\S+)\s*$")
-  $tokenMatch = [regex]::Match($Text, "(?im)^\s*Token\s*:\s*(\S+)\s*$")
-  if ($apiMatch.Success -and $tokenMatch.Success) {
-    return [pscustomobject]@{
-      Api = $apiMatch.Groups[1].Value.Trim().TrimEnd("/")
-      Token = $tokenMatch.Groups[1].Value.Trim()
-    }
-  }
-
-  throw "Configuracao invalida. Use JSON: { `"api`": `"https://.../v1`", `"token`": `"sk-...`" }"
-}
-
-function Get-FirstPropertyValue($Object, [string[]]$Names) {
-  foreach ($name in $Names) {
-    if ($Object.PSObject.Properties.Name -contains $name) {
-      $value = [string]$Object.$name
-      if ($value -and $value.Trim()) {
-        return $value
-      }
-    }
-  }
-  return ""
-}
-
-function Get-ClientConfig {
-  if ($ConfigPath) {
-    return Convert-ClientConfig (Get-Content -LiteralPath $ConfigPath -Raw)
-  }
-
-  if ($ConfigJson) {
-    return Convert-ClientConfig $ConfigJson
-  }
-
-  try {
-    $clipboard = Get-Clipboard -Raw -ErrorAction SilentlyContinue
-    if ($clipboard -and ($clipboard -match '"api"|API\s*:') -and ($clipboard -match '"token"|Token\s*:')) {
-      Write-Host "Configuracao encontrada na area de transferencia." -ForegroundColor Green
-      return Convert-ClientConfig $clipboard
-    }
-  } catch {
-    # Get-Clipboard pode nao existir em ambientes antigos.
-  }
-
-  Write-Host "Cole o JSON com api e token em uma unica linha." -ForegroundColor Yellow
-  Write-Host 'Exemplo: {"api":"https://gtw.dgsis.com.br/v1","token":"sk-..."}'
-  $typed = Read-Host "JSON"
-  return Convert-ClientConfig $typed
-}
-
-function Assert-ClientConfig($ClientConfig) {
-  if (-not $ClientConfig.Api.StartsWith("http://") -and -not $ClientConfig.Api.StartsWith("https://")) {
-    throw "API invalida. Use uma URL completa, por exemplo https://gtw.dgsis.com.br/v1"
-  }
-  if ($ClientConfig.Token.Length -lt 10) {
-    throw "Token invalido ou muito curto."
-  }
-}
-
-function Install-Dependencies {
-  if ($SkipDependencyInstall) {
-    return
-  }
-
-  Write-Step "Verificando Node.js"
-  if (-not (Test-Command "node")) {
-    if (-not (Test-Command "winget")) {
-      throw "Node.js nao encontrado e winget nao esta disponivel. Instale Node.js LTS manualmente e rode novamente."
-    }
-    Write-Host "Instalando Node.js LTS..."
+function InstallDeps {
+  if($SkipDependencyInstall){ return }
+  Step "Verificando Node.js 20+"
+  if((NodeMajor) -lt 20){
+    if(-not (Has winget)){ throw "Instale Node.js LTS ou habilite winget." }
     & winget install --id OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements
-    Refresh-Path
+    RefreshPath
   }
-
-  if (-not (Test-Command "node")) {
-    throw "Node.js ainda nao foi encontrado no PATH. Feche e abra o PowerShell, depois rode novamente."
-  }
-
-  Write-Step "Instalando ou atualizando Claude Code"
-  if (-not (Test-Command "npm")) {
-    Refresh-Path
-  }
-  if (-not (Test-Command "npm")) {
-    throw "npm nao encontrado. Reinstale Node.js LTS."
-  }
+  if((NodeMajor) -lt 20){ throw "Node.js 20+ nao encontrado apos instalacao." }
+  Ok (& node -v)
+  Step "Instalando Claude Code CLI"
+  if(-not (Has npm)){ RefreshPath }
+  if(-not (Has npm)){ throw "npm nao encontrado." }
   & npm install -g "@anthropic-ai/claude-code"
-  Refresh-Path
+  RefreshPath
+  if(-not (Has claude)){ throw "claude nao encontrado apos npm install." }
+  Ok (& claude --version)
+  if($InstallCodexCli){ Step "Instalando OpenAI Codex CLI opcional"; Invoke-Expression (Invoke-RestMethod -Uri "https://chatgpt.com/codex/install.ps1" -TimeoutSec 60); RefreshPath }
 }
 
-function Get-PackageRoot {
-  if ($PSScriptRoot -and $PSScriptRoot.Trim()) {
-    $localAdapter = Join-Path $PSScriptRoot "adapter"
-    if (Test-Path -LiteralPath (Join-Path $localAdapter "package.json")) {
-      return $PSScriptRoot
-    }
-  }
-
-  Write-Step "Baixando pacote do GitHub"
-  if ($RepositoryZipUrl -match "SEU_USUARIO") {
-    throw "Configure RepositoryZipUrl em install.ps1 com o usuario real do GitHub antes de usar o comando remoto."
-  }
-
-  $tempDir = Join-Path ([IO.Path]::GetTempPath()) ("dgsis-claude-installer-" + [guid]::NewGuid().ToString("N"))
-  New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-  $zipPath = Join-Path $tempDir "repo.zip"
-  Invoke-WebRequest -Uri $RepositoryZipUrl -OutFile $zipPath
-  Expand-Archive -LiteralPath $zipPath -DestinationPath $tempDir -Force
-  $root = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
-  if (-not $root -or -not (Test-Path (Join-Path $root.FullName "adapter\package.json"))) {
-    throw "Pacote baixado nao contem adapter/package.json."
-  }
+function PackageRoot {
+  if($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot 'adapter\src\server.js'))){ return $PSScriptRoot }
+  Step "Baixando pacote do GitHub"
+  $tmp = Join-Path ([IO.Path]::GetTempPath()) ("dgsis-claude-"+[guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+  $zip = Join-Path $tmp 'repo.zip'
+  Invoke-WebRequest -Uri $RepositoryZipUrl -OutFile $zip -TimeoutSec 60
+  Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
+  $root = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
+  if(-not $root -or -not (Test-Path (Join-Path $root.FullName 'adapter\src\server.js'))){ throw "Pacote invalido." }
   return $root.FullName
 }
 
-function New-AdapterApiKey {
-  $bytes = New-Object byte[] 32
-  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-  try {
-    $rng.GetBytes($bytes)
-  } finally {
-    $rng.Dispose()
-  }
-  $raw = [Convert]::ToBase64String($bytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
-  return "abca_$raw"
+function InstallProxy($root,$t){
+  Step "Instalando proxy local"
+  New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir 'src') | Out-Null
+  Copy-Item -LiteralPath (Join-Path $root 'adapter\package.json') -Destination (Join-Path $InstallDir 'package.json') -Force
+  Copy-Item -LiteralPath (Join-Path $root 'adapter\src\server.js') -Destination (Join-Path $InstallDir 'src\server.js') -Force
+  Set-Content -LiteralPath (Join-Path $InstallDir '.env') -Encoding UTF8 -Value "PORT=$Port`nUPSTREAM_BASE_URL=$BaseUrl`nUPSTREAM_API_KEY=$t`n"
 }
 
-function Install-AdapterFiles($PackageRoot) {
-  Write-Step "Instalando adaptador local"
-  $sourceAdapter = Join-Path $PackageRoot "adapter"
-  New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-  New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir "data") | Out-Null
-
-  foreach ($file in @("package.json", "README.md", ".gitignore", ".env.example")) {
-    $source = Join-Path $sourceAdapter $file
-    if (Test-Path $source) {
-      Copy-Item -LiteralPath $source -Destination (Join-Path $InstallDir $file) -Force
-    }
-  }
-
-  $destSrc = Join-Path $InstallDir "src"
-  if (Test-Path $destSrc) {
-    Remove-Item -LiteralPath $destSrc -Recurse -Force
-  }
-  Copy-Item -LiteralPath (Join-Path $sourceAdapter "src") -Destination $destSrc -Recurse -Force
+function ConfigureClaude {
+  Step "Configurando Claude Code"
+  $dir = Join-Path $env:USERPROFILE '.claude'; $backup = Join-Path $dir 'backups'; New-Item -ItemType Directory -Force -Path $backup | Out-Null
+  $path = Join-Path $dir 'settings.json'; $s = [pscustomobject]@{}
+  if(Test-Path $path){ try{ $s = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json; Copy-Item -LiteralPath $path -Destination (Join-Path $backup ("settings.before-dgsis-"+(Get-Date -Format yyyyMMdd-HHmmss)+".json")) -Force }catch{} }
+  if(-not ($s.PSObject.Properties.Name -contains 'env') -or -not $s.env){ $s | Add-Member -NotePropertyName env -NotePropertyValue ([pscustomobject]@{}) -Force }
+  $s.env.PSObject.Properties.Remove('ANTHROPIC_API_KEY')
+  $s.env | Add-Member -Force -NotePropertyName ANTHROPIC_BASE_URL -NotePropertyValue "http://127.0.0.1:$Port/v1"
+  $s.env | Add-Member -Force -NotePropertyName ANTHROPIC_AUTH_TOKEN -NotePropertyValue 'dgsis-local-proxy'
+  $s.env | Add-Member -Force -NotePropertyName ANTHROPIC_MODEL -NotePropertyValue $DefaultModel
+  $s.env | Add-Member -Force -NotePropertyName CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY -NotePropertyValue 'true'
+  $s | ConvertTo-Json -Depth 64 | Set-Content -LiteralPath $path -Encoding UTF8
+  Ok "settings.json atualizado"
 }
 
-function Write-AdapterEnv($ClientConfig) {
-  $envPath = Join-Path $InstallDir ".env"
-  $content = @"
-HOST=127.0.0.1
-PORT=$Port
-UPSTREAM_BASE_URL=$($ClientConfig.Api)
-UPSTREAM_API_KEY=$($ClientConfig.Token)
-DEFAULT_MODEL=ag/claude-opus-4-6-thinking
-OPUS_MODEL=ag/claude-opus-4-6-thinking
-SONNET_MODEL=ag/claude-sonnet-4-6
-HAIKU_MODEL=ag/claude-sonnet-4-6
-REQUEST_TIMEOUT_SECONDS=300
-"@
-  Set-Content -LiteralPath $envPath -Value $content -Encoding UTF8
-}
+function StopProxy { try{ Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 1 }catch{} }
+function StartProxy { Step "Iniciando proxy"; StopProxy; Start-Process -FilePath (Get-Command node).Source -ArgumentList @('src/server.js') -WorkingDirectory $InstallDir -WindowStyle Hidden | Out-Null }
 
-function Ensure-AdapterKey {
-  $keyPath = Join-Path $InstallDir "data\adapter-api-key.txt"
-  if (Test-Path $keyPath) {
-    $existing = (Get-Content -LiteralPath $keyPath -Raw).Trim()
-    if ($existing) {
-      return $existing
-    }
-  }
-  $key = New-AdapterApiKey
-  Set-Content -LiteralPath $keyPath -Value $key -Encoding UTF8
-  return $key
-}
-
-function Configure-ClaudeCode($AdapterKey) {
-  Write-Step "Configurando Claude Code"
-  $claudeDir = Join-Path $env:USERPROFILE ".claude"
-  New-Item -ItemType Directory -Force -Path $claudeDir | Out-Null
-  $settingsPath = Join-Path $claudeDir "settings.json"
-  $backupDir = Join-Path $claudeDir "backups"
-  New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
-
-  $settings = [pscustomobject]@{}
-  if (Test-Path $settingsPath) {
-    try {
-      $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
-      $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-      Copy-Item -LiteralPath $settingsPath -Destination (Join-Path $backupDir "settings.before-dgsis-$stamp.json") -Force
-    } catch {
-      $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-      Copy-Item -LiteralPath $settingsPath -Destination (Join-Path $backupDir "settings.invalid-before-dgsis-$stamp.json") -Force
-      $settings = [pscustomobject]@{}
-    }
-  }
-
-  if (-not ($settings.PSObject.Properties.Name -contains "env") -or -not $settings.env) {
-    $settings | Add-Member -MemberType NoteProperty -Name env -Value ([pscustomobject]@{}) -Force
-  }
-  $settings.env | Add-Member -MemberType NoteProperty -Name ANTHROPIC_API_KEY -Value $AdapterKey -Force
-  $settings.env | Add-Member -MemberType NoteProperty -Name ANTHROPIC_BASE_URL -Value "http://127.0.0.1:$Port" -Force
-  if ($settings.env.PSObject.Properties.Name -contains "ANTHROPIC_AUTH_TOKEN") {
-    $settings.env.PSObject.Properties.Remove("ANTHROPIC_AUTH_TOKEN")
-  }
-
-  $settings | Add-Member -MemberType NoteProperty -Name model -Value "ag/claude-opus-4-6-thinking" -Force
-  $settings | Add-Member -MemberType NoteProperty -Name syntaxHighlightingDisabled -Value $true -Force
-  $settings | Add-Member -MemberType NoteProperty -Name autoUpdatesChannel -Value "latest" -Force
-  $settings | Add-Member -MemberType NoteProperty -Name skipDangerousModePermissionPrompt -Value $false -Force
-  $settings | Add-Member -MemberType NoteProperty -Name theme -Value "dark" -Force
-  $settings | Add-Member -MemberType NoteProperty -Name effortLevel -Value "xhigh" -Force
-
-  $settings | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
-}
-
-function Get-NodePath {
-  $nodePath = (Get-Command "node" -ErrorAction SilentlyContinue).Source
-  if (-not $nodePath -or -not $nodePath.Trim()) {
-    throw "Node.js nao encontrado no PATH."
-  }
-  return $nodePath
-}
-
-function Write-StartScript {
-  $startPath = Join-Path $InstallDir "start-adapter.ps1"
-  $escapedInstallDir = $InstallDir.Replace("'", "''")
-  $nodePath = Get-NodePath
-  $escapedNodePath = $nodePath.Replace("'", "''")
-  $content = @"
-`$ErrorActionPreference = "Stop"
-Set-Location -LiteralPath '$escapedInstallDir'
-& '$escapedNodePath' src/server.js
-"@
-  Set-Content -LiteralPath $startPath -Value $content -Encoding UTF8
-  return $startPath
-}
-
-function Stop-AdapterOnPort {
-  try {
-    $listeners = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Listen" }
-    foreach ($listener in $listeners) {
-      Stop-Process -Id $listener.OwningProcess -Force -ErrorAction SilentlyContinue
-    }
-    Start-Sleep -Seconds 1
+function Autostart {
+  if($NoAutoStart){ return }
+  Step "Configurando inicio automatico"
+  $node = (Get-Command node).Source
+  try{
+    Register-ScheduledTask -TaskName $TaskName -Action (New-ScheduledTaskAction -Execute $node -Argument 'src/server.js' -WorkingDirectory $InstallDir) -Trigger (New-ScheduledTaskTrigger -AtLogOn) -Description 'Inicia proxy DGSIS Claude Code' -Force | Out-Null
+    Ok "tarefa agendada criada"
   } catch {
-    # Se Get-NetTCPConnection falhar, a proxima inicializacao ainda pode funcionar.
+    $startup=[Environment]::GetFolderPath('Startup'); New-Item -ItemType Directory -Force -Path $startup | Out-Null
+    $vbs=Join-Path $startup 'DGSIS Claude Code Proxy.vbs'
+    Set-Content -LiteralPath $vbs -Encoding ASCII -Value "Set shell = CreateObject(""WScript.Shell"")`r`nshell.CurrentDirectory = ""$InstallDir""`r`nshell.Run """"$node"" src/server.js"", 0, False`r`n"
+    Ok "launcher Startup criado"
   }
 }
 
-function Configure-Autostart($StartScript) {
-  if ($NoAutoStart) {
-    return
+function WaitHealth {
+  for($i=0;$i -lt 30;$i++){
+    try{ $h=Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 3; if($h.ok){ return } }
+    catch{ Start-Sleep -Seconds 1 }
   }
-
-  Write-Step "Configurando inicio automatico"
-  $nodePath = Get-NodePath
-  $action = New-ScheduledTaskAction -Execute $nodePath -Argument "src/server.js" -WorkingDirectory $InstallDir
-  $trigger = New-ScheduledTaskTrigger -AtLogOn
-  try {
-    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Description "Inicia o adaptador local DGSIS Claude Code" -Force | Out-Null
-    Remove-StartupLauncher
-  } catch {
-    Write-Host "Agendador bloqueado pelo Windows. Usando Inicializar do usuario." -ForegroundColor Yellow
-    Write-StartupLauncher | Out-Null
-  }
+  throw "Proxy nao respondeu."
 }
 
-function Get-StartupFolder {
-  $startup = [Environment]::GetFolderPath("Startup")
-  if (-not $startup -or -not $startup.Trim()) {
-    $startup = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
-  }
-  New-Item -ItemType Directory -Force -Path $startup | Out-Null
-  return $startup
+function FinalTest {
+  Step "Testando Claude Code"
+  $o=& claude -p 'Responda exatamente INSTALL_OK, sem mais nada.' 2>&1
+  $txt=($o -join "`n").Trim()
+  if($LASTEXITCODE -ne 0 -or $txt -ne 'INSTALL_OK'){ throw "Teste falhou: $txt" }
+  Ok "claude respondeu INSTALL_OK"
 }
 
-function Get-StartupLauncherPath {
-  return (Join-Path (Get-StartupFolder) "DGSIS Claude Adapter.vbs")
-}
-
-function Remove-StartupLauncher {
-  $launcherPath = Get-StartupLauncherPath
-  if (Test-Path -LiteralPath $launcherPath) {
-    Remove-Item -LiteralPath $launcherPath -Force -ErrorAction SilentlyContinue
-  }
-}
-
-function Write-StartupLauncher {
-  $launcherPath = Get-StartupLauncherPath
-  $nodePath = Get-NodePath
-  $escapedInstallDir = $InstallDir.Replace('"', '""')
-  $escapedNodePath = $nodePath.Replace('"', '""')
-  $content = @"
-Set shell = CreateObject("WScript.Shell")
-shell.CurrentDirectory = "$escapedInstallDir"
-shell.Run """$escapedNodePath"" src/server.js", 0, False
-"@
-  Set-Content -LiteralPath $launcherPath -Value $content -Encoding ASCII
-  return $launcherPath
-}
-
-function Start-AdapterNow($StartScript) {
-  Write-Step "Iniciando adaptador"
-  Stop-AdapterOnPort
-  Start-Process -FilePath (Get-NodePath) -ArgumentList @("src/server.js") -WorkingDirectory $InstallDir -WindowStyle Hidden | Out-Null
-}
-
-function Wait-Health {
-  $healthUrl = "http://127.0.0.1:$Port/health"
-  for ($i = 0; $i -lt 30; $i++) {
-    try {
-      $health = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 3
-      if ($health.ok -eq $true) {
-        return $health
-      }
-    } catch {
-      Start-Sleep -Seconds 1
-    }
-  }
-  throw "Adaptador nao respondeu em $healthUrl."
-}
-
-function Test-ClaudeCode {
-  if (-not (Test-Command "claude")) {
-    Refresh-Path
-  }
-  if (-not (Test-Command "claude")) {
-    throw "Claude Code nao encontrado no PATH apos instalacao."
-  }
-  $output = & claude -p "Responda exatamente: OK" 2>&1
-  $text = ($output -join "`n").Trim()
-  if ($LASTEXITCODE -ne 0 -or $text -ne "OK") {
-    throw "Teste do Claude Code falhou: $text"
-  }
-}
-
-try {
+try{
   Write-Host "DGSIS Claude Code Installer" -ForegroundColor Green
-  $clientConfig = Get-ClientConfig
-  Assert-ClientConfig $clientConfig
-
-  Install-Dependencies
-  $packageRoot = Get-PackageRoot
-  Install-AdapterFiles $packageRoot
-  Write-AdapterEnv $clientConfig
-  $adapterKey = Ensure-AdapterKey
-  Configure-ClaudeCode $adapterKey
-  $startScript = Write-StartScript
-  Configure-Autostart $startScript
-  Start-AdapterNow $startScript
-  $health = Wait-Health
-  Test-ClaudeCode
-
+  ValidateBaseUrl
+  $clientToken = if($SelfTestOnly){ '' }else{ GetToken }
+  if(-not $SelfTestOnly){ ValidateToken $clientToken }
+  InstallDeps
+  if(-not $SelfTestOnly){
+    $root=PackageRoot
+    InstallProxy $root $clientToken
+    ConfigureClaude
+    Autostart
+    StartProxy
+  }
+  WaitHealth
+  FinalTest
   Write-Host ""
   Write-Host "Instalacao concluida." -ForegroundColor Green
-  Write-Host "Adaptador: http://127.0.0.1:$Port"
-  Write-Host "Modelo padrao: $($health.defaultModel)"
-  Write-Host "Para abrir: claude"
-  Write-Host ""
+  Write-Host "Proxy: http://127.0.0.1:$Port/v1"
+  Write-Host "Modelo: $DefaultModel"
+  Write-Host "Abrir: claude"
 } catch {
   Write-Host ""
   Write-Host "Falha na instalacao: $($_.Exception.Message)" -ForegroundColor Red
-  throw
+  exit 1
 }

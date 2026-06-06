@@ -1,4 +1,4 @@
 {
-  "api": "https://gtw.dgsis.com.br/v1",
-  "token": "COLE_O_TOKEN_DO_CLIENTE_AQUI"
+  "base_url": "https://gtw.dgsis.com.br/v1",
+  "token": "COLE_O_TOKEN_DO_CLIENTE_INDIVIDUAL_AQUI"
 }

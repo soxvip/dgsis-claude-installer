@@ -1,70 +1,114 @@
 # DGSIS Claude Code Installer
 
-Instalador simples para configurar o Claude Code com a API DGSIS.
+Instalador para configurar Claude Code com o gateway DGSIS usando proxy local estavel.
 
-## Instalacao por Comando Unico
+O proxy expõe apenas modelos validados e faz fallback seguro:
+
+```text
+claude-opus-4-8     -> kr/claude-opus-4.8
+claude-sonnet-4-6   -> kr/claude-sonnet-4.6
+codex-5-5 / gpt-5.5 -> cx/gpt-5.5
+gemini manual       -> cx/gpt-5.5
+```
+
+Gemini real e Haiku ficam ocultos por padrao porque falharam testes de estabilidade/conformidade.
+
+## Windows
+
+Abra PowerShell e execute:
 
 ```powershell
 irm https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.ps1 | iex
 ```
 
-O instalador vai pedir um JSON em uma unica linha:
+O script sempre pede o token DGSIS individual do cliente no terminal.
 
-```json
-{"api":"https://gtw.dgsis.com.br/v1","token":"TOKEN_DO_CLIENTE"}
+## macOS
+
+Abra Terminal e execute:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.sh | bash
 ```
 
-Tambem funciona se esse JSON ja estiver copiado na area de transferencia antes de rodar o comando.
-
-## Instalacao Manual Pelo ZIP
-
-1. Baixe o ZIP do repositorio.
-2. Extraia a pasta.
-3. Edite `client-config.example.json` com o token do cliente.
-4. Rode:
-
-```powershell
-.\install.ps1 -ConfigPath .\client-config.example.json
-```
+O script sempre pede o token DGSIS individual do cliente no terminal.
 
 ## O Que O Instalador Faz
 
-- Instala Node.js LTS se faltar.
-- Instala ou atualiza Claude Code.
-- Instala o adaptador em `%LOCALAPPDATA%\DGSIS\claude-adapter`.
-- Configura `%USERPROFILE%\.claude\settings.json`.
-- Remove `ANTHROPIC_AUTH_TOKEN` se existir.
-- Cria inicio automatico no Windows.
-- Testa `claude -p "Responda exatamente: OK"`.
+- Valida o token em `https://gtw.dgsis.com.br/v1/models`.
+- Confirma acesso a `kr/claude-opus-4.8`, `kr/claude-sonnet-4.6` e `cx/gpt-5.5`.
+- Instala Node.js 20+ se faltar.
+- Instala ou atualiza Claude Code CLI com `npm install -g @anthropic-ai/claude-code`.
+- Instala proxy local em `127.0.0.1:8792`.
+- Configura `~/.claude/settings.json`.
+- Cria inicializacao automatica.
+- Executa teste final com `claude -p`.
 
-## Modelos
-
-Padrao:
+## Modelos Visiveis
 
 ```text
-ag/claude-opus-4-6-thinking
+claude-opus-4-8
+claude-opus-4.8
+kr/claude-opus-4.8
+claude-sonnet-4-6
+claude-sonnet-4.6
+kr/claude-sonnet-4.6
+codex-5-5
+codex-5.5
+gpt-5-5
+gpt-5.5
+cx/gpt-5.5
 ```
 
-Atalhos:
+## Comandos Uteis
+
+Teste rapido:
+
+```bash
+claude -p "Responda exatamente OK, sem mais nada."
+```
+
+Abrir Claude Code:
+
+```bash
+claude
+```
+
+Health do proxy:
+
+```bash
+curl http://127.0.0.1:8792/health
+```
+
+## Instalacao Opcional Do OpenAI Codex CLI
+
+O fluxo DGSIS testado neste repositorio usa Claude Code (`claude`).
+
+Se o cliente tambem quiser OpenAI Codex CLI oficial, use:
+
+Windows:
 
 ```powershell
-claude --model opus
-claude --model sonnet
-claude --model haiku
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.ps1))) -InstallCodexCli
 ```
 
-Modelos diretos:
+macOS:
 
-```powershell
-claude --model "ag/claude-opus-4-6-thinking"
-claude --model "ag/claude-sonnet-4-6"
-claude --model "kr/claude-opus-4.8"
-claude --model "kr/deepseek-3.2"
-claude --model "kr/qwen3-coder-next"
+```bash
+curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.sh | bash -s -- --install-codex-cli
 ```
+
+Leia tambem [VSCODE-CODEX-GUIDE.md](VSCODE-CODEX-GUIDE.md).
+
+## Reexecutar
+
+Pode rodar de novo para trocar token, atualizar proxy ou corrigir configuracao. Backups de `settings.json` ficam em `~/.claude/backups`.
 
 ## Seguranca
 
-Nao coloque tokens reais no GitHub.
+Nunca coloque token real em GitHub, README ou print publico. Cada cliente deve usar token individual para facilitar revogacao.
 
-Use um token individual por cliente. Assim voce consegue revogar ou limitar um cliente sem afetar os outros.
+## Guias
+
+- [AI-INSTALLER-GUIDE.md](AI-INSTALLER-GUIDE.md): prompt/instrucoes para uma IA instalar para o cliente.
+- [VSCODE-CODEX-GUIDE.md](VSCODE-CODEX-GUIDE.md): instalar VS Code e Codex IDE Extension.
