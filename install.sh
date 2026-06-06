@@ -56,7 +56,10 @@ validate_token(){
   local tmp
   tmp="$(mktemp)"
   code="$(curl -sS -o "$tmp" -w '%{http_code}' -H "Authorization: Bearer $t" "$BASE_URL/models" || true)"
-  if [ "$code" = "401" ]; then fail "Token DGSIS invalido/expirado ou sem autorizacao para $BASE_URL. Peça ao cliente um token novo e cole sem aspas."; fi
+  if [ "$code" = "401" ]; then
+    if grep -qi 'remote API access' "$tmp"; then fail "Token DGSIS com formato valido, mas sem acesso remoto API para $BASE_URL. Gere/habilite um token de API remota para este cliente."; fi
+    fail "Token DGSIS invalido/expirado ou sem autorizacao para $BASE_URL. Peça ao cliente um token novo e cole sem aspas."
+  fi
   [ "$code" = "200" ] || fail "Falha ao validar token em $BASE_URL/models. HTTP $code."
   for m in 'kr/claude-opus-4.8' 'kr/claude-sonnet-4.6' 'cx/gpt-5.5'; do
     grep -q "\"$m\"" "$tmp" || fail "Token sem acesso a $m"

@@ -39,15 +39,26 @@ function ValidateBaseUrl {
 
 function ValidateToken($t){
   Step "Validando token e modelos DGSIS"
+  $status = 0
+  $body = ""
   try {
-    $r = Invoke-RestMethod -Uri "$BaseUrl/models" -Headers @{Authorization="Bearer $t"} -TimeoutSec 30
+    $resp = Invoke-WebRequest -Uri "$BaseUrl/models" -Headers @{Authorization="Bearer $t"} -TimeoutSec 30
+    $status = [int]$resp.StatusCode
+    $body = [string]$resp.Content
   } catch {
-    $status = $null
     try { $status = [int]$_.Exception.Response.StatusCode } catch {}
-    if($status -eq 401){ throw "Token DGSIS invalido/expirado ou sem autorizacao para $BaseUrl. Peça ao cliente um token novo e cole sem aspas." }
-    if($status){ throw "Falha ao validar token em $BaseUrl/models. HTTP $status." }
-    throw "Falha ao validar token em $BaseUrl/models: $($_.Exception.Message)"
+    try {
+      $stream = $_.Exception.Response.GetResponseStream()
+      if($stream){ $reader = New-Object System.IO.StreamReader($stream); $body = $reader.ReadToEnd(); $reader.Dispose() }
+    } catch {}
+    if(-not $status){ throw "Falha ao validar token em $BaseUrl/models: $($_.Exception.Message)" }
   }
+  if($status -eq 401){
+    if($body -match 'remote API access'){ throw "Token DGSIS com formato valido, mas sem acesso remoto API para $BaseUrl. Gere/habilite um token de API remota para este cliente." }
+    throw "Token DGSIS invalido/expirado ou sem autorizacao para $BaseUrl. Peça ao cliente um token novo e cole sem aspas."
+  }
+  if($status -ne 200){ throw "Falha ao validar token em $BaseUrl/models. HTTP $status." }
+  $r = $body | ConvertFrom-Json
   $ids = @($r.data | ForEach-Object { $_.id })
   foreach($m in @('kr/claude-opus-4.8','kr/claude-sonnet-4.6','cx/gpt-5.5')){ if($ids -notcontains $m){ throw "Token sem acesso a $m" } }
   Ok "token valido"
