@@ -30,7 +30,7 @@ O token precisa estar habilitado para acesso remoto API. Formato parecido com `s
 Abra Terminal e execute:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install-macos.sh | bash
 ```
 
 O script sempre pede o token DGSIS individual do cliente no terminal.
@@ -41,6 +41,7 @@ O token precisa estar habilitado para acesso remoto API. Formato parecido com `s
 - Valida o token em `https://gtw.dgsis.com.br/v1/models`.
 - Confirma acesso a `kr/claude-opus-4.8`, `kr/claude-sonnet-4.6` e `cx/gpt-5.5`.
 - Instala Node.js 20+ se faltar.
+- No macOS, instala Homebrew se faltar e usa Homebrew para instalar Node.js.
 - Instala ou atualiza Claude Code CLI com `npm install -g @anthropic-ai/claude-code`.
 - Instala proxy local em `127.0.0.1:8792`.
 - Configura `~/.claude/settings.json`.

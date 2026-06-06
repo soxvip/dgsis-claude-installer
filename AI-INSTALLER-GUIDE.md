@@ -47,16 +47,17 @@ Abra Terminal.
 Comando padrao:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install-macos.sh | bash
 ```
 
 Se precisar informar Base URL diferente:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.sh | bash -s -- --base-url "https://gtw.dgsis.com.br/v1"
+curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install-macos.sh | bash -s -- --base-url "https://gtw.dgsis.com.br/v1"
 ```
 
 Durante a instalacao, quando pedir token, o cliente deve colar o token individual.
+No macOS, o instalador usa Homebrew para instalar Node.js 20+ se Node estiver ausente ou antigo. Se Homebrew tambem nao existir, o instalador instala Homebrew antes.
 
 ## O Que A IA Deve Conferir
 

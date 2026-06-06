@@ -168,14 +168,15 @@ EOF
   fi
 }
 
-wait_health(){ for i in $(seq 1 30); do curl -fsSL "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && return; sleep 1; done; fail "Proxy nao respondeu."; }
+health_ok(){ curl -fsSL "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; }
+wait_health(){ for i in $(seq 1 30); do health_ok && return; sleep 1; done; fail "Proxy nao respondeu."; }
 final_test(){ step "Testando Claude Code"; out="$(claude -p 'Responda exatamente INSTALL_OK, sem mais nada.' 2>&1 | tr -d '\r')"; [ "$out" = "INSTALL_OK" ] || fail "Teste falhou: $out"; ok "claude respondeu INSTALL_OK"; }
 
 validate_base_url
 CLIENT_TOKEN=""
 if [ "$SELF_TEST_ONLY" -eq 0 ]; then CLIENT_TOKEN="$(get_token)"; validate_token "$CLIENT_TOKEN"; fi
 install_deps
-if [ "$SELF_TEST_ONLY" -eq 0 ]; then ROOT="$(package_root)"; install_proxy "$ROOT" "$CLIENT_TOKEN"; configure_claude; autostart; start_proxy; fi
+if [ "$SELF_TEST_ONLY" -eq 0 ]; then ROOT="$(package_root)"; install_proxy "$ROOT" "$CLIENT_TOKEN"; configure_claude; stop_proxy; autostart; health_ok || start_proxy; fi
 wait_health
 final_test
 printf '\nInstalacao concluida.\nProxy: http://127.0.0.1:%s/v1\nModelo: %s\nAbrir: claude\n' "$PORT" "$DEFAULT_MODEL"
