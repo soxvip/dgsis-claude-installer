@@ -37,20 +37,40 @@ function ValidateBaseUrl {
   if(-not ($script:BaseUrl.StartsWith('https://') -or $script:BaseUrl.StartsWith('http://'))){ throw "BaseUrl invalida: $BaseUrl" }
 }
 
+function GetHttpErrorStatus($err) {
+  try {
+    if($err.Exception.Response -and $null -ne $err.Exception.Response.StatusCode){ return [int]$err.Exception.Response.StatusCode }
+  } catch {}
+  return 0
+}
+
+function GetHttpErrorBody($err) {
+  $resp = $err.Exception.Response
+  if(-not $resp){ return "" }
+  try {
+    if($resp.Content){ return [string]$resp.Content.ReadAsStringAsync().GetAwaiter().GetResult() }
+  } catch {}
+  try {
+    $stream = $resp.GetResponseStream()
+    if($stream){
+      $reader = New-Object System.IO.StreamReader($stream)
+      try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
+    }
+  } catch {}
+  return ""
+}
+
 function ValidateToken($t){
   Step "Validando token e modelos DGSIS"
   $status = 0
   $body = ""
   try {
-    $resp = Invoke-WebRequest -Uri "$BaseUrl/models" -Headers @{Authorization="Bearer $t"} -TimeoutSec 30
+    $resp = Invoke-WebRequest -Uri "$BaseUrl/models" -Headers @{Authorization="Bearer $t"} -TimeoutSec 30 -UseBasicParsing -ErrorAction Stop
     $status = [int]$resp.StatusCode
     $body = [string]$resp.Content
   } catch {
-    try { $status = [int]$_.Exception.Response.StatusCode } catch {}
-    try {
-      $stream = $_.Exception.Response.GetResponseStream()
-      if($stream){ $reader = New-Object System.IO.StreamReader($stream); $body = $reader.ReadToEnd(); $reader.Dispose() }
-    } catch {}
+    $status = GetHttpErrorStatus $_
+    $body = GetHttpErrorBody $_
     if(-not $status){ throw "Falha ao validar token em $BaseUrl/models: $($_.Exception.Message)" }
   }
   if($status -eq 401){

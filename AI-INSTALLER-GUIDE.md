@@ -14,6 +14,8 @@ https://gtw.dgsis.com.br/v1
 
 Token: pedir sempre ao cliente. Cada cliente tem token individual. Nao invente, nao reutilize token de outro cliente, nao salve em chat publico.
 
+O token precisa ter acesso remoto API liberado para `https://gtw.dgsis.com.br/v1`. Formato parecido com `sk-...-...-...` nao confirma permissao. Se o gateway responder `API key required for remote API access`, peça ao responsavel DGSIS para gerar/habilitar token de API remota para esse cliente.
+
 ## Perguntas Obrigatorias Ao Cliente
 
 1. Qual sistema operacional? Windows ou macOS?
@@ -109,7 +111,8 @@ cx/gpt-5.5
 ## Se Der Erro
 
 1. Confirmar token com cliente.
-2. Rodar validação manual:
+2. Se aparecer erro 401 com `remote API access`, nao tentar trocar modelo nem reinstalar Claude Code. O token esta sem permissao de API remota.
+3. Rodar validação manual:
 
 Windows:
 
@@ -123,8 +126,8 @@ macOS:
 read -rsp "Token DGSIS: " TOKEN; echo
 ```
 
-3. Conferir se porta `8792` esta livre ou se o proxy esta rodando.
-4. Reexecutar instalador.
+4. Conferir se porta `8792` esta livre ou se o proxy esta rodando.
+5. Reexecutar instalador.
 
 ## Onde Ficam Arquivos
 

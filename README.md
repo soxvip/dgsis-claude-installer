@@ -23,6 +23,7 @@ irm https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install
 ```
 
 O script sempre pede o token DGSIS individual do cliente no terminal.
+O token precisa estar habilitado para acesso remoto API. Formato parecido com `sk-...-...-...` nao basta se o gateway retornar `API key required for remote API access`.
 
 ## macOS
 
@@ -33,6 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/
 ```
 
 O script sempre pede o token DGSIS individual do cliente no terminal.
+O token precisa estar habilitado para acesso remoto API. Formato parecido com `sk-...-...-...` nao basta se o gateway retornar `API key required for remote API access`.
 
 ## O Que O Instalador Faz
 
@@ -84,6 +86,10 @@ curl http://127.0.0.1:8792/health
 ## Reexecutar
 
 Pode rodar de novo para trocar token, atualizar proxy ou corrigir configuracao. Backups de `settings.json` ficam em `~/.claude/backups`.
+
+## Erro 401 No Token
+
+Se aparecer `Token DGSIS com formato valido, mas sem acesso remoto API`, o instalador esta correto e o token tambem pode parecer correto. O problema e permissao no gateway DGSIS: gere ou habilite um token de API remota para este cliente em `https://gtw.dgsis.com.br/v1`.
 
 ## Seguranca
 
