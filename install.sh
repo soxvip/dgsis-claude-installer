@@ -30,14 +30,19 @@ need(){ command -v "$1" >/dev/null 2>&1; }
 node_major(){ need node || { echo 0; return; }; node -v | sed 's/^v//' | cut -d. -f1; }
 
 get_token(){
-  if [ -n "$TOKEN" ]; then printf '%s' "$TOKEN"; return; fi
+  if [ -n "$TOKEN" ]; then normalize_token "$TOKEN"; return; fi
   printf 'Cole o token DGSIS deste cliente: ' >&2
   stty -echo 2>/dev/null || true
   IFS= read -r t
   stty echo 2>/dev/null || true
   printf '\n' >&2
+  t="$(normalize_token "$t")"
   [ "${#t}" -ge 10 ] || fail "Token vazio ou curto demais."
   printf '%s' "$t"
+}
+
+normalize_token(){
+  printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//" -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
 validate_base_url(){
@@ -50,7 +55,9 @@ validate_token(){
   step "Validando token e modelos DGSIS"
   local tmp
   tmp="$(mktemp)"
-  curl -fsSL -H "Authorization: Bearer $t" "$BASE_URL/models" -o "$tmp" || fail "Token invalido ou gateway indisponivel."
+  code="$(curl -sS -o "$tmp" -w '%{http_code}' -H "Authorization: Bearer $t" "$BASE_URL/models" || true)"
+  if [ "$code" = "401" ]; then fail "Token DGSIS invalido/expirado ou sem autorizacao para $BASE_URL. Peça ao cliente um token novo e cole sem aspas."; fi
+  [ "$code" = "200" ] || fail "Falha ao validar token em $BASE_URL/models. HTTP $code."
   for m in 'kr/claude-opus-4.8' 'kr/claude-sonnet-4.6' 'cx/gpt-5.5'; do
     grep -q "\"$m\"" "$tmp" || fail "Token sem acesso a $m"
   done

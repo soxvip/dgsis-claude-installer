@@ -21,10 +21,15 @@ function Plain($s){ $b=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($s)
 function NodeMajor { if(-not (Has node)){0}else{ [int]((& node -v).Trim().TrimStart('v').Split('.')[0]) } }
 
 function GetToken {
-  if($Token.Trim()){ return $Token.Trim() }
+  if($Token.Trim()){ return (NormalizeToken $Token) }
   $t = Plain (Read-Host -AsSecureString -Prompt "Cole o token DGSIS deste cliente")
-  if(-not $t -or $t.Trim().Length -lt 10){ throw "Token vazio ou curto demais." }
-  return $t.Trim()
+  $t = NormalizeToken $t
+  if(-not $t -or $t.Length -lt 10){ throw "Token vazio ou curto demais." }
+  return $t
+}
+
+function NormalizeToken($value) {
+  return ([string]$value).Trim().Trim('"').Trim("'").Trim()
 }
 
 function ValidateBaseUrl {
@@ -34,7 +39,15 @@ function ValidateBaseUrl {
 
 function ValidateToken($t){
   Step "Validando token e modelos DGSIS"
-  $r = Invoke-RestMethod -Uri "$BaseUrl/models" -Headers @{Authorization="Bearer $t"} -TimeoutSec 30
+  try {
+    $r = Invoke-RestMethod -Uri "$BaseUrl/models" -Headers @{Authorization="Bearer $t"} -TimeoutSec 30
+  } catch {
+    $status = $null
+    try { $status = [int]$_.Exception.Response.StatusCode } catch {}
+    if($status -eq 401){ throw "Token DGSIS invalido/expirado ou sem autorizacao para $BaseUrl. Peça ao cliente um token novo e cole sem aspas." }
+    if($status){ throw "Falha ao validar token em $BaseUrl/models. HTTP $status." }
+    throw "Falha ao validar token em $BaseUrl/models: $($_.Exception.Message)"
+  }
   $ids = @($r.data | ForEach-Object { $_.id })
   foreach($m in @('kr/claude-opus-4.8','kr/claude-sonnet-4.6','cx/gpt-5.5')){ if($ids -notcontains $m){ throw "Token sem acesso a $m" } }
   Ok "token valido"
