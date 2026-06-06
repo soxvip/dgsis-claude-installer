@@ -74,8 +74,7 @@ function ValidateToken($t){
     if(-not $status){ throw "Falha ao validar token em $BaseUrl/models: $($_.Exception.Message)" }
   }
   if($status -eq 401){
-    if($body -match 'remote API access'){ throw "Token DGSIS com formato valido, mas sem acesso remoto API para $BaseUrl. Gere/habilite um token de API remota para este cliente." }
-    throw "Token DGSIS invalido/expirado ou sem autorizacao para $BaseUrl. Peça ao cliente um token novo e cole sem aspas."
+    throw "Token DGSIS recusado pelo gateway (401). Mesmo com formato valido tipo sk-...-...-..., ele precisa estar habilitado para acesso remoto API em $BaseUrl. Gere/habilite token de API remota para este cliente."
   }
   if($status -ne 200){ throw "Falha ao validar token em $BaseUrl/models. HTTP $status." }
   $r = $body | ConvertFrom-Json
