@@ -9,6 +9,10 @@ const port = Number(process.env.DGSIS_CLAUDE_PROXY_PORT || process.env.PORT || 8
 const upstreamBaseUrl = trimSlash(process.env.UPSTREAM_BASE_URL || 'https://gtw.dgsis.com.br/v1');
 const userProfile = process.env.USERPROFILE || process.env.HOME || '';
 const settingsPath = path.join(userProfile, '.claude', 'settings.json');
+const configuredAvailableModels = new Set(String(process.env.AVAILABLE_MODELS || '')
+  .split(',')
+  .map(model => model.trim())
+  .filter(Boolean));
 
 function readSettings() {
   try {
@@ -64,11 +68,21 @@ const codexFallbackModels = [
 
 const exposedStableModels = new Set([
   'kr/claude-opus-4.8',
+  'kr/claude-opus-4.8-thinking',
+  'kr/claude-opus-4.7',
+  'kr/claude-opus-4.7-thinking',
+  'kr/claude-opus-4.6',
+  'kr/claude-opus-4.6-thinking',
+  'kr/claude-opus-4.5',
+  'kr/claude-opus-4.5-thinking',
   'kr/claude-sonnet-4.6',
+  'kr/claude-sonnet-4.5',
+  'kr/claude-sonnet-4',
   'cx/gpt-5.5',
 ]);
 
-let discoveredAliases = new Map();
+let availableModelIds = new Set(configuredAvailableModels);
+let discoveredAliases = buildAliasesFromModels([...configuredAvailableModels]);
 let discoveredAt = 0;
 
 function addDiscoveredAlias(map, alias, modelId) {
@@ -123,6 +137,14 @@ function uniqueModels(models) {
   return result;
 }
 
+function filterAvailableModels(models) {
+  if (availableModelIds.size === 0) {
+    return models;
+  }
+  const available = models.filter(model => availableModelIds.has(model));
+  return available.length > 0 ? available : models;
+}
+
 function buildModelCandidates(originalModel) {
   const mappedModel = mapModel(originalModel);
   const explicitGemini = typeof mappedModel === 'string' && mappedModel.includes('/gemini');
@@ -131,21 +153,21 @@ function buildModelCandidates(originalModel) {
 
   if (explicitGemini) {
     if (geminiAgentFallbackModels.length === 0) {
-      return uniqueModels([...codexFallbackModels, ...claudeFallbackModels]);
+      return filterAvailableModels(uniqueModels([...codexFallbackModels, ...claudeFallbackModels]));
     }
-    return uniqueModels([mappedModel, ...geminiAgentFallbackModels]);
+    return filterAvailableModels(uniqueModels([mappedModel, ...geminiAgentFallbackModels]));
   }
 
   if (explicitCodex) {
-    return uniqueModels([mappedModel, ...codexFallbackModels, ...geminiAgentFallbackModels]);
+    return filterAvailableModels(uniqueModels([mappedModel, ...codexFallbackModels, ...geminiAgentFallbackModels]));
   }
 
-  return uniqueModels([
+  return filterAvailableModels(uniqueModels([
     mappedModel,
     ...claudeFallbackModels,
     ...codexFallbackModels,
     ...geminiAgentFallbackModels,
-  ]);
+  ]));
 }
 
 function payloadWithModel(payload, model) {
@@ -262,6 +284,7 @@ function sendJson(res, statusCode, payload) {
 
 async function refreshAliases(modelsPayload) {
   const models = Array.isArray(modelsPayload?.data) ? modelsPayload.data : [];
+  availableModelIds = new Set(models.map(model => model?.id).filter(Boolean));
   discoveredAliases = buildAliasesFromModels(models);
   discoveredAt = Date.now();
 }
@@ -315,7 +338,7 @@ async function handleModels(req, res) {
 
 async function handleProxy(req, res) {
   if (req.method === 'GET' && req.url === '/health') {
-    sendJson(res, 200, { ok: true, aliases: discoveredAliases.size, discoveredAt });
+    sendJson(res, 200, { ok: true, aliases: discoveredAliases.size, discoveredAt, availableModels: availableModelIds.size });
     return;
   }
 

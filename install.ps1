@@ -6,6 +6,7 @@ param(
   [switch]$NoAutoStart,
   [switch]$NoPause,
   [switch]$ExitOnComplete,
+  [switch]$ValidateOnly,
   [switch]$SelfTestOnly
 )
 
@@ -15,6 +16,20 @@ $LocalAppDataRoot = if([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)){ Join-Pa
 $InstallDir = Join-Path $LocalAppDataRoot "DGSIS\claude-code-proxy"
 $TaskName = "DGSIS Claude Code Proxy"
 $DefaultModel = "claude-opus-4-8"
+$AvailableModelIds = @()
+$SupportedModelPriority = @(
+  @{ id='kr/claude-opus-4.8'; alias='claude-opus-4-8' },
+  @{ id='kr/claude-opus-4.8-thinking'; alias='claude-opus-4-8-thinking' },
+  @{ id='kr/claude-opus-4.7'; alias='claude-opus-4-7' },
+  @{ id='kr/claude-opus-4.7-thinking'; alias='claude-opus-4-7-thinking' },
+  @{ id='kr/claude-opus-4.6'; alias='claude-opus-4-6' },
+  @{ id='kr/claude-opus-4.6-thinking'; alias='claude-opus-4-6-thinking' },
+  @{ id='kr/claude-opus-4.5'; alias='claude-opus-4-5' },
+  @{ id='kr/claude-sonnet-4.6'; alias='claude-sonnet-4-6' },
+  @{ id='kr/claude-sonnet-4.5'; alias='claude-sonnet-4-5' },
+  @{ id='kr/claude-sonnet-4'; alias='claude-sonnet-4' },
+  @{ id='cx/gpt-5.5'; alias='codex-5-5' }
+)
 $TempRoot = if([string]::IsNullOrWhiteSpace($env:TEMP)){ [IO.Path]::GetTempPath() } else { $env:TEMP }
 $LogDir = Join-Path $TempRoot "dgsis-claude-installer"
 $LogPath = Join-Path $LogDir ("install-" + (Get-Date -Format yyyyMMdd-HHmmss) + ".log")
@@ -105,8 +120,15 @@ function ValidateToken($t){
   if($status -ne 200){ throw "Falha ao validar token em $BaseUrl/models. HTTP $status." }
   $r = $body | ConvertFrom-Json
   $ids = @($r.data | ForEach-Object { $_.id })
-  foreach($m in @('kr/claude-opus-4.8','kr/claude-sonnet-4.6','cx/gpt-5.5')){ if($ids -notcontains $m){ throw "Token sem acesso a $m" } }
-  Ok "token valido"
+  $script:AvailableModelIds = @($ids | Where-Object { $_ })
+  $supported = @($SupportedModelPriority | Where-Object { $ids -contains $_.id })
+  if($supported.Count -lt 1){
+    throw "Token valido, mas sem acesso a nenhum modelo suportado pelo instalador. Precisa ter pelo menos um destes: $((@($SupportedModelPriority | ForEach-Object { $_.id })) -join ', ')"
+  }
+  $script:DefaultModel = $supported[0].alias
+  $missingImportant = @('kr/claude-opus-4.8','kr/claude-sonnet-4.6','cx/gpt-5.5') | Where-Object { $ids -notcontains $_ }
+  if($missingImportant.Count -gt 0){ Write-Host "Aviso: token sem acesso opcional a $($missingImportant -join ', '). Instalacao continua com fallback." -ForegroundColor Yellow }
+  Ok "token valido; modelo padrao: $DefaultModel"
 }
 
 function InstallDeps {
@@ -146,7 +168,7 @@ function InstallProxy($root,$t){
   New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir 'src') | Out-Null
   Copy-Item -LiteralPath (Join-Path $root 'adapter\package.json') -Destination (Join-Path $InstallDir 'package.json') -Force
   Copy-Item -LiteralPath (Join-Path $root 'adapter\src\server.js') -Destination (Join-Path $InstallDir 'src\server.js') -Force
-  Set-Content -LiteralPath (Join-Path $InstallDir '.env') -Encoding UTF8 -Value "PORT=$Port`nUPSTREAM_BASE_URL=$BaseUrl`nUPSTREAM_API_KEY=$t`n"
+  Set-Content -LiteralPath (Join-Path $InstallDir '.env') -Encoding UTF8 -Value "PORT=$Port`nUPSTREAM_BASE_URL=$BaseUrl`nUPSTREAM_API_KEY=$t`nAVAILABLE_MODELS=$($AvailableModelIds -join ',')`n"
 }
 
 function ConfigureClaude {
@@ -204,6 +226,7 @@ try{
   ValidateBaseUrl
   $clientToken = if($SelfTestOnly){ '' }else{ GetToken }
   if(-not $SelfTestOnly){ ValidateToken $clientToken }
+  if($ValidateOnly){ Finish 0; return }
   InstallDeps
   if(-not $SelfTestOnly){
     $root=PackageRoot

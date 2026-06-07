@@ -2,7 +2,7 @@
 
 Instalador para configurar Claude Code com o gateway DGSIS usando proxy local estavel.
 
-O proxy expõe apenas modelos validados e faz fallback seguro:
+O proxy expõe apenas modelos disponiveis no token e faz fallback seguro:
 
 ```text
 claude-opus-4-8     -> kr/claude-opus-4.8
@@ -10,6 +10,8 @@ claude-sonnet-4-6   -> kr/claude-sonnet-4.6
 codex-5-5 / gpt-5.5 -> cx/gpt-5.5
 gemini manual       -> cx/gpt-5.5
 ```
+
+Se o token nao tiver Sonnet, a instalacao continua com Opus/Codex disponiveis. Se um modelo nao existir no token, ele nao aparece como modelo validado.
 
 Gemini real e Haiku ficam ocultos por padrao porque falharam testes de estabilidade/conformidade.
 `codex-5-5` e `gpt-5.5` sao apenas aliases de modelo usados dentro do Claude Code. Este pacote instala somente Claude Code.
@@ -39,7 +41,7 @@ O token precisa estar habilitado para acesso remoto API. Formato parecido com `s
 ## O Que O Instalador Faz
 
 - Valida o token em `https://gtw.dgsis.com.br/v1/models`.
-- Confirma acesso a `kr/claude-opus-4.8`, `kr/claude-sonnet-4.6` e `cx/gpt-5.5`.
+- Confirma acesso a pelo menos um modelo suportado, priorizando Claude e usando Codex como fallback.
 - Instala Node.js 20+ se faltar.
 - No macOS, instala Homebrew se faltar e usa Homebrew para instalar Node.js.
 - Instala ou atualiza Claude Code CLI com `npm install -g @anthropic-ai/claude-code`.
@@ -49,6 +51,8 @@ O token precisa estar habilitado para acesso remoto API. Formato parecido com `s
 - Executa teste final com `claude -p`.
 
 ## Modelos Visiveis
+
+Dependem do token. Estes sao exemplos quando todos existem:
 
 ```text
 claude-opus-4-8
@@ -63,6 +67,8 @@ gpt-5-5
 gpt-5.5
 cx/gpt-5.5
 ```
+
+Se aparecer aviso como `token sem acesso opcional a kr/claude-sonnet-4.6`, nao e erro. O instalador continua usando os modelos disponiveis.
 
 ## Comandos Uteis
 

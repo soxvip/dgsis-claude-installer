@@ -7,9 +7,37 @@ PORT="8792"
 SKIP_DEPS=0
 NO_AUTOSTART=0
 SELF_TEST_ONLY=0
+VALIDATE_ONLY=0
 REPO_ZIP_URL="https://github.com/soxvip/dgsis-claude-installer/archive/refs/heads/main.zip"
 INSTALL_DIR="$HOME/.dgsis/claude-code-proxy"
 DEFAULT_MODEL="claude-opus-4-8"
+AVAILABLE_MODELS=""
+SUPPORTED_MODEL_IDS=(
+  'kr/claude-opus-4.8'
+  'kr/claude-opus-4.8-thinking'
+  'kr/claude-opus-4.7'
+  'kr/claude-opus-4.7-thinking'
+  'kr/claude-opus-4.6'
+  'kr/claude-opus-4.6-thinking'
+  'kr/claude-opus-4.5'
+  'kr/claude-sonnet-4.6'
+  'kr/claude-sonnet-4.5'
+  'kr/claude-sonnet-4'
+  'cx/gpt-5.5'
+)
+SUPPORTED_MODEL_ALIASES=(
+  'claude-opus-4-8'
+  'claude-opus-4-8-thinking'
+  'claude-opus-4-7'
+  'claude-opus-4-7-thinking'
+  'claude-opus-4-6'
+  'claude-opus-4-6-thinking'
+  'claude-opus-4-5'
+  'claude-sonnet-4-6'
+  'claude-sonnet-4-5'
+  'claude-sonnet-4'
+  'codex-5-5'
+)
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -19,6 +47,7 @@ while [ "$#" -gt 0 ]; do
     --skip-deps) SKIP_DEPS=1; shift ;;
     --no-autostart) NO_AUTOSTART=1; shift ;;
     --self-test-only) SELF_TEST_ONLY=1; shift ;;
+    --validate-only) VALIDATE_ONLY=1; shift ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -60,11 +89,25 @@ validate_token(){
     fail "Token DGSIS recusado pelo gateway (401). Mesmo com formato valido tipo sk-...-...-..., ele precisa estar habilitado para acesso remoto API em $BASE_URL. Gere/habilite token de API remota para este cliente."
   fi
   [ "$code" = "200" ] || fail "Falha ao validar token em $BASE_URL/models. HTTP $code."
-  for m in 'kr/claude-opus-4.8' 'kr/claude-sonnet-4.6' 'cx/gpt-5.5'; do
-    grep -q "\"$m\"" "$tmp" || fail "Token sem acesso a $m"
+  local supported_count=0
+  local missing_important=""
+  AVAILABLE_MODELS=""
+  for i in "${!SUPPORTED_MODEL_IDS[@]}"; do
+    local m="${SUPPORTED_MODEL_IDS[$i]}"
+    if grep -q "\"$m\"" "$tmp"; then
+      [ -n "$AVAILABLE_MODELS" ] && AVAILABLE_MODELS="$AVAILABLE_MODELS,"
+      AVAILABLE_MODELS="$AVAILABLE_MODELS$m"
+      supported_count=$((supported_count + 1))
+      if [ "$supported_count" -eq 1 ]; then DEFAULT_MODEL="${SUPPORTED_MODEL_ALIASES[$i]}"; fi
+    fi
   done
+  if [ "$supported_count" -lt 1 ]; then fail "Token valido, mas sem acesso a nenhum modelo suportado pelo instalador. Precisa ter pelo menos um modelo Claude ou cx/gpt-5.5."; fi
+  for m in 'kr/claude-opus-4.8' 'kr/claude-sonnet-4.6' 'cx/gpt-5.5'; do
+    if ! grep -q "\"$m\"" "$tmp"; then missing_important="$missing_important ${m}"; fi
+  done
+  if [ -n "$missing_important" ]; then printf 'Aviso: token sem acesso opcional a%s. Instalacao continua com fallback.\n' "$missing_important" >&2; fi
   rm -f "$tmp"
-  ok "token valido"
+  ok "token valido; modelo padrao: $DEFAULT_MODEL"
 }
 
 install_deps(){
@@ -110,6 +153,7 @@ install_proxy(){
 PORT=$PORT
 UPSTREAM_BASE_URL=$BASE_URL
 UPSTREAM_API_KEY=$t
+AVAILABLE_MODELS=$AVAILABLE_MODELS
 EOF
   chmod 600 "$INSTALL_DIR/.env"
 }
@@ -175,6 +219,7 @@ final_test(){ step "Testando Claude Code"; out="$(claude -p 'Responda exatamente
 validate_base_url
 CLIENT_TOKEN=""
 if [ "$SELF_TEST_ONLY" -eq 0 ]; then CLIENT_TOKEN="$(get_token)"; validate_token "$CLIENT_TOKEN"; fi
+[ "$VALIDATE_ONLY" -eq 0 ] || { printf '\nValidacao concluida.\nModelo: %s\n' "$DEFAULT_MODEL"; exit 0; }
 install_deps
 if [ "$SELF_TEST_ONLY" -eq 0 ]; then ROOT="$(package_root)"; install_proxy "$ROOT" "$CLIENT_TOKEN"; configure_claude; stop_proxy; autostart; health_ok || start_proxy; fi
 wait_health

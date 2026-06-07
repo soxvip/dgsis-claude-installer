@@ -41,6 +41,7 @@ powershell -NoExit -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::
 ```
 
 Durante a instalacao, quando pedir token, o cliente deve colar o token individual.
+O token nao precisa ter todos os modelos. Precisa ter pelo menos um modelo suportado. Se faltar `kr/claude-sonnet-4.6`, a instalacao deve continuar com aviso e usar Opus/Codex disponiveis.
 
 ## Instalacao macOS
 
@@ -95,6 +96,8 @@ OK
 
 ## Modelos Que Devem Aparecer
 
+Dependem do token do cliente. Estes sao exemplos quando todos existem:
+
 ```text
 claude-opus-4-8
 claude-opus-4.8
@@ -110,13 +113,15 @@ cx/gpt-5.5
 ```
 
 `codex-5-5` e `gpt-5.5` sao aliases de modelo usados dentro do Claude Code. Este processo instala somente Claude Code.
+Se Sonnet nao aparecer, nao e falha quando o token nao tem acesso a Sonnet.
 
 ## Se Der Erro
 
 1. Confirmar token com cliente.
 2. Se aparecer erro 401 com `remote API access`, nao tentar trocar modelo nem reinstalar Claude Code. O token esta sem permissao de API remota.
-3. No Windows, pedir o log mais recente em `%TEMP%\dgsis-claude-installer\install-*.log`.
-4. Rodar validação manual:
+3. Se aparecer aviso de modelo opcional ausente, como `kr/claude-sonnet-4.6`, continuar. Isso nao bloqueia instalacao.
+4. No Windows, pedir o log mais recente em `%TEMP%\dgsis-claude-installer\install-*.log`.
+5. Rodar validação manual:
 
 Windows:
 
@@ -130,8 +135,8 @@ macOS:
 read -rsp "Token DGSIS: " TOKEN; echo
 ```
 
-5. Conferir se porta `8792` esta livre ou se o proxy esta rodando.
-6. Reexecutar instalador.
+6. Conferir se porta `8792` esta livre ou se o proxy esta rodando.
+7. Reexecutar instalador.
 
 ## Onde Ficam Arquivos
 
