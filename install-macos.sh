@@ -17,4 +17,6 @@ if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/install.sh" ]; then
   exec bash "$SCRIPT_DIR/install.sh" "$@"
 fi
 
-curl -fsSL "$INSTALL_URL" | bash -s -- "$@"
+TMP_SCRIPT="${TMPDIR:-/tmp}/dgsis-claude-install.sh"
+curl -fsSL "$INSTALL_URL" -o "$TMP_SCRIPT"
+exec bash "$TMP_SCRIPT" "$@"

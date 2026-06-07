@@ -62,10 +62,9 @@ function PauseOnInteractiveFailure {
 }
 
 function GetToken {
-  if($Token.Trim()){ return (NormalizeToken $Token) }
-  $t = Plain (Read-Host -AsSecureString -Prompt "Cole o token DGSIS deste cliente")
-  $t = NormalizeToken $t
+  $t = if($Token.Trim()){ NormalizeToken $Token }else{ NormalizeToken (Plain (Read-Host -AsSecureString -Prompt "Cole o token DGSIS deste cliente")) }
   if(-not $t -or $t.Length -lt 10){ throw "Token vazio ou curto demais." }
+  if(-not $t.StartsWith('sk-')){ throw "Token DGSIS invalido: precisa comecar com sk-." }
   return $t
 }
 

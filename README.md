@@ -32,7 +32,7 @@ O token precisa estar habilitado para acesso remoto API. Formato parecido com `s
 Abra Terminal e execute:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install-macos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.sh -o /tmp/dgsis-claude-install.sh && bash /tmp/dgsis-claude-install.sh
 ```
 
 O script sempre pede o token DGSIS individual do cliente no terminal.

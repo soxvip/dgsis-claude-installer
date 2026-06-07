@@ -50,13 +50,13 @@ Abra Terminal.
 Comando padrao:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install-macos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.sh -o /tmp/dgsis-claude-install.sh && bash /tmp/dgsis-claude-install.sh
 ```
 
 Se precisar informar Base URL diferente:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install-macos.sh | bash -s -- --base-url "https://gtw.dgsis.com.br/v1"
+curl -fsSL https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.sh -o /tmp/dgsis-claude-install.sh && bash /tmp/dgsis-claude-install.sh --base-url "https://gtw.dgsis.com.br/v1"
 ```
 
 Durante a instalacao, quando pedir token, o cliente deve colar o token individual.

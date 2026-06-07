@@ -59,14 +59,23 @@ need(){ command -v "$1" >/dev/null 2>&1; }
 node_major(){ need node || { echo 0; return; }; node -v | sed 's/^v//' | cut -d. -f1; }
 
 get_token(){
-  if [ -n "$TOKEN" ]; then normalize_token "$TOKEN"; return; fi
-  printf 'Cole o token DGSIS deste cliente: ' >&2
-  stty -echo 2>/dev/null || true
-  IFS= read -r t
-  stty echo 2>/dev/null || true
-  printf '\n' >&2
-  t="$(normalize_token "$t")"
+  local t
+  if [ -n "$TOKEN" ]; then
+    t="$(normalize_token "$TOKEN")"
+  else
+    t=""
+    if ! ( : </dev/tty ) 2>/dev/null; then
+      fail "Terminal interativo nao encontrado para pedir token. Baixe o script para arquivo e rode: bash install.sh"
+    fi
+    printf 'Cole o token DGSIS deste cliente: ' >/dev/tty
+    stty -echo </dev/tty 2>/dev/null || true
+    IFS= read -r t </dev/tty || t=""
+    stty echo </dev/tty 2>/dev/null || true
+    printf '\n' >/dev/tty
+    t="$(normalize_token "$t")"
+  fi
   [ "${#t}" -ge 10 ] || fail "Token vazio ou curto demais."
+  case "$t" in sk-*) ;; *) fail "Token DGSIS invalido: precisa comecar com sk-." ;; esac
   printf '%s' "$t"
 }
 
