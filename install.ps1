@@ -11,7 +11,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RepositoryZipUrl = "https://github.com/soxvip/dgsis-claude-installer/archive/refs/heads/main.zip"
+$RepositoryRawBaseUrl = "https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main"
 $LocalAppDataRoot = if([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)){ Join-Path $env:USERPROFILE "AppData\Local" } else { $env:LOCALAPPDATA }
 $InstallDir = Join-Path $LocalAppDataRoot "DGSIS\claude-code-proxy"
 $TaskName = "DGSIS Claude Code Proxy"
@@ -154,13 +154,11 @@ function PackageRoot {
   if($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot 'adapter\src\server.js'))){ return $PSScriptRoot }
   Step "Baixando pacote do GitHub"
   $tmp = Join-Path ([IO.Path]::GetTempPath()) ("dgsis-claude-"+[guid]::NewGuid().ToString('N'))
-  New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-  $zip = Join-Path $tmp 'repo.zip'
-  Invoke-WebRequest -Uri $RepositoryZipUrl -OutFile $zip -TimeoutSec 60
-  Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
-  $root = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
-  if(-not $root -or -not (Test-Path (Join-Path $root.FullName 'adapter\src\server.js'))){ throw "Pacote invalido." }
-  return $root.FullName
+  New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'adapter\src') | Out-Null
+  Invoke-WebRequest -Uri "$RepositoryRawBaseUrl/adapter/package.json" -OutFile (Join-Path $tmp 'adapter\package.json') -UseBasicParsing -TimeoutSec 60
+  Invoke-WebRequest -Uri "$RepositoryRawBaseUrl/adapter/src/server.js" -OutFile (Join-Path $tmp 'adapter\src\server.js') -UseBasicParsing -TimeoutSec 60
+  if(-not (Test-Path (Join-Path $tmp 'adapter\src\server.js'))){ throw "Pacote invalido." }
+  return $tmp
 }
 
 function InstallProxy($root,$t){

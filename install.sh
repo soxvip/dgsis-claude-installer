@@ -8,7 +8,7 @@ SKIP_DEPS=0
 NO_AUTOSTART=0
 SELF_TEST_ONLY=0
 VALIDATE_ONLY=0
-REPO_ZIP_URL="https://github.com/soxvip/dgsis-claude-installer/archive/refs/heads/main.zip"
+RAW_BASE_URL="https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main"
 INSTALL_DIR="$HOME/.dgsis/claude-code-proxy"
 DEFAULT_MODEL="claude-opus-4-8"
 AVAILABLE_MODELS=""
@@ -136,11 +136,13 @@ package_root(){
   here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd -P || pwd)"
   if [ -f "$here/adapter/src/server.js" ]; then printf '%s' "$here"; return; fi
   step "Baixando pacote do GitHub"
-  local tmp zip
-  tmp="$(mktemp -d)"; zip="$tmp/repo.zip"
-  curl -fsSL "$REPO_ZIP_URL" -o "$zip"
-  unzip -q "$zip" -d "$tmp"
-  find "$tmp" -maxdepth 2 -path '*/adapter/src/server.js' -print -quit | sed 's#/adapter/src/server.js##'
+  local tmp
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/adapter/src"
+  curl -fsSL "$RAW_BASE_URL/adapter/package.json" -o "$tmp/adapter/package.json"
+  curl -fsSL "$RAW_BASE_URL/adapter/src/server.js" -o "$tmp/adapter/src/server.js"
+  [ -f "$tmp/adapter/src/server.js" ] || fail "Pacote invalido."
+  printf '%s' "$tmp"
 }
 
 install_proxy(){
