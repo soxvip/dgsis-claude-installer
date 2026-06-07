@@ -4,7 +4,7 @@ Use este arquivo quando uma IA ou tecnico for instalar o ambiente para um client
 
 ## Objetivo
 
-Deixar o cliente usando Claude Code (`claude`) com gateway DGSIS via proxy local.
+Deixar o cliente usando Claude Code CLI (`claude`), Claude Desktop e Google Antigravity com gateway DGSIS via proxy local.
 
 Base URL padrao:
 
@@ -24,7 +24,9 @@ O token precisa ter acesso remoto API liberado para `https://gtw.dgsis.com.br/v1
 
 ## Instalacao Windows
 
-Abra PowerShell normal. Se winget ou Node exigirem permissao, abrir PowerShell como Administrador.
+Windows suportado: Windows 10 1809+ e Windows 11, incluindo Windows 11 Pro.
+
+Abra PowerShell normal. Se winget, Node, Claude Desktop ou Antigravity exigirem permissao, abrir PowerShell como Administrador.
 
 Comando padrao:
 
@@ -42,6 +44,15 @@ powershell -NoExit -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::
 
 Durante a instalacao, quando pedir token, o cliente deve colar o token individual.
 O token nao precisa ter todos os modelos. Precisa ter pelo menos um modelo suportado. Se faltar `kr/claude-sonnet-4.6`, a instalacao deve continuar com aviso e usar Opus/Codex disponiveis.
+
+No Windows, o instalador instala somente o que estiver ausente:
+
+- Node.js 20+ se faltar.
+- Claude Code CLI se `claude` nao existir.
+- Claude Desktop se nao estiver instalado.
+- Google Antigravity se nao estiver instalado.
+
+Se algum app ja existir, o instalador apenas configura o proxy e variaveis de usuario. Depois, fechar e abrir Claude Desktop/Antigravity para herdarem as variaveis novas.
 
 ## Instalacao macOS
 
@@ -92,6 +103,7 @@ OK
 - `claude --version` funciona.
 - `http://127.0.0.1:8792/health` responde JSON com `ok: true`.
 - `~/.claude/settings.json` aponta para `http://127.0.0.1:8792/v1`.
+- No Windows, variaveis de usuario `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL` e `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY` existem.
 - `claude -p "Responda exatamente OK, sem mais nada."` responde `OK`.
 
 ## Modelos Que Devem Aparecer

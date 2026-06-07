@@ -16,7 +16,7 @@ Se o token nao tiver Sonnet, a instalacao continua com Opus/Codex disponiveis. S
 Gemini real e Haiku ficam ocultos por padrao porque falharam testes de estabilidade/conformidade.
 `codex-5-5` e `gpt-5.5` sao apenas aliases de modelo usados dentro do Claude Code. Este pacote instala somente Claude Code.
 
-## Windows
+## Windows 10/11/11 Pro
 
 Abra PowerShell e execute:
 
@@ -26,6 +26,7 @@ powershell -NoExit -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::
 
 O script sempre pede o token DGSIS individual do cliente no terminal.
 O token precisa estar habilitado para acesso remoto API. Formato parecido com `sk-...-...-...` nao basta se o gateway retornar `API key required for remote API access`.
+Windows suportado: Windows 10 1809+ e Windows 11, incluindo Windows 11 Pro.
 
 ## macOS
 
@@ -43,12 +44,17 @@ O token precisa estar habilitado para acesso remoto API. Formato parecido com `s
 - Valida o token em `https://gtw.dgsis.com.br/v1/models`.
 - Confirma acesso a pelo menos um modelo suportado, priorizando Claude e usando Codex como fallback.
 - Instala Node.js 20+ se faltar.
+- Instala Claude Code CLI somente se `claude` nao existir.
+- Instala Claude Desktop somente se nao estiver instalado.
+- Instala Google Antigravity somente se nao estiver instalado.
 - No macOS, instala Homebrew se faltar e usa Homebrew para instalar Node.js.
-- Instala ou atualiza Claude Code CLI com `npm install -g @anthropic-ai/claude-code`.
 - Instala proxy local em `127.0.0.1:8792`.
 - Configura `~/.claude/settings.json`.
+- Configura variaveis de usuario `ANTHROPIC_*` para apps desktop e terminais novos.
 - Cria inicializacao automatica.
 - Executa teste final com `claude -p`.
+
+Depois de instalar, feche e abra Claude Desktop e Antigravity para herdarem as variaveis novas do Windows.
 
 ## Modelos Visiveis
 

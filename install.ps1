@@ -3,6 +3,8 @@ param(
   [string]$BaseUrl = "https://gtw.dgsis.com.br/v1",
   [int]$Port = 8792,
   [switch]$SkipDependencyInstall,
+  [switch]$SkipClaudeDesktop,
+  [switch]$SkipAntigravity,
   [switch]$NoAutoStart,
   [switch]$NoPause,
   [switch]$ExitOnComplete,
@@ -42,6 +44,22 @@ function Has($c){ return $null -ne (Get-Command $c -ErrorAction SilentlyContinue
 function RefreshPath { $env:Path = ([Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")) }
 function Plain($s){ $b=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); try{[Runtime.InteropServices.Marshal]::PtrToStringBSTR($b)}finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b)} }
 function NodeMajor { if(-not (Has node)){0}else{ [int]((& node -v).Trim().TrimStart('v').Split('.')[0]) } }
+function UserPathContains($path){ return (([Environment]::GetEnvironmentVariable('Path','User') -split ';') | Where-Object { $_ -and ($_.TrimEnd('\') -ieq $path.TrimEnd('\')) }).Count -gt 0 }
+function AddUserPath($path){
+  if(-not (Test-Path -LiteralPath $path)){ return }
+  if(UserPathContains $path){ return }
+  $current = [Environment]::GetEnvironmentVariable('Path','User')
+  $next = if([string]::IsNullOrWhiteSpace($current)){ $path }else{ "$current;$path" }
+  [Environment]::SetEnvironmentVariable('Path',$next,'User')
+  RefreshPath
+}
+function BroadcastEnvironmentChange {
+  try {
+    Add-Type -ErrorAction SilentlyContinue -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class NativeEnv { [DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult); }' | Out-Null
+    $result = [UIntPtr]::Zero
+    [void][NativeEnv]::SendMessageTimeout([IntPtr]0xffff,0x1A,[UIntPtr]::Zero,'Environment',2,5000,[ref]$result)
+  } catch {}
+}
 function StartLog {
   try {
     New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -75,6 +93,22 @@ function NormalizeToken($value) {
 function ValidateBaseUrl {
   $script:BaseUrl = $BaseUrl.TrimEnd('/')
   if(-not ($script:BaseUrl.StartsWith('https://') -or $script:BaseUrl.StartsWith('http://'))){ throw "BaseUrl invalida: $BaseUrl" }
+}
+
+function ValidateWindows {
+  Step "Validando Windows"
+  $caption = 'Windows'
+  $version = [Environment]::OSVersion.Version
+  try {
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+    $caption = $os.Caption
+    $version = [Version]$os.Version
+  } catch {
+    Write-Host "Aviso: WMI/CIM indisponivel para detectar edicao do Windows; usando versao do sistema." -ForegroundColor Yellow
+  }
+  if($version.Major -lt 10){ throw "Windows nao suportado: $caption $version. Use Windows 10 1809+ ou Windows 11." }
+  if($version.Major -eq 10 -and $version.Build -lt 17763){ throw "Windows 10 antigo demais: build $($version.Build). Use Windows 10 1809+ ou Windows 11." }
+  Ok "$caption build $($version.Build)"
 }
 
 function GetHttpErrorStatus($err) {
@@ -130,23 +164,79 @@ function ValidateToken($t){
   Ok "token valido; modelo padrao: $DefaultModel"
 }
 
-function InstallDeps {
-  if($SkipDependencyInstall){ return }
+function WingetAvailable { return Has winget }
+function WingetInstalled($id){
+  if(-not (WingetAvailable)){ return $false }
+  $old = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try { & winget list --id $id -e --accept-source-agreements | Out-Null; return $LASTEXITCODE -eq 0 } catch { return $false } finally { $ErrorActionPreference = $old }
+}
+function InstallWingetPackage($id,$name){
+  if(-not (WingetAvailable)){ throw "winget nao encontrado. Instale App Installer pela Microsoft Store ou instale $name manualmente." }
+  & winget install --id $id -e --silent --accept-package-agreements --accept-source-agreements
+  if($LASTEXITCODE -ne 0){ throw "Falha ao instalar $name via winget. Codigo $LASTEXITCODE." }
+}
+function EnsureNode {
   Step "Verificando Node.js 20+"
-  if((NodeMajor) -lt 20){
-    if(-not (Has winget)){ throw "Instale Node.js LTS ou habilite winget." }
-    & winget install --id OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements
-    RefreshPath
-  }
+  if((NodeMajor) -lt 20){ InstallWingetPackage 'OpenJS.NodeJS.LTS' 'Node.js LTS'; RefreshPath }
   if((NodeMajor) -lt 20){ throw "Node.js 20+ nao encontrado apos instalacao." }
   Ok (& node -v)
-  Step "Instalando Claude Code CLI"
+}
+function EnsureClaudeCodeCli {
+  Step "Verificando Claude Code CLI"
+  RefreshPath
+  if(Has claude){ Ok "claude existente: $(& claude --version)"; return }
+  EnsureNode
   if(-not (Has npm)){ RefreshPath }
-  if(-not (Has npm)){ throw "npm nao encontrado." }
+  if(-not (Has npm)){ throw "npm nao encontrado apos instalar Node.js." }
   & npm install -g "@anthropic-ai/claude-code"
+  if($LASTEXITCODE -ne 0){ throw "Falha ao instalar Claude Code CLI via npm. Codigo $LASTEXITCODE." }
   RefreshPath
   if(-not (Has claude)){ throw "claude nao encontrado apos npm install." }
-  Ok (& claude --version)
+  Ok "claude instalado: $(& claude --version)"
+}
+function ClaudeDesktopInstalled {
+  if(WingetInstalled 'Anthropic.Claude'){ return $true }
+  $paths = @(
+    (Join-Path $env:LOCALAPPDATA 'AnthropicClaude\Claude.exe'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\Claude\Claude.exe'),
+    (Join-Path $env:ProgramFiles 'Claude\Claude.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Claude\Claude.exe')
+  )
+  return @($paths | Where-Object { $_ -and (Test-Path -LiteralPath $_) }).Count -gt 0
+}
+function EnsureClaudeDesktop {
+  if($SkipClaudeDesktop){ return }
+  Step "Verificando Claude Desktop"
+  if(ClaudeDesktopInstalled){ Ok "Claude Desktop existente"; return }
+  InstallWingetPackage 'Anthropic.Claude' 'Claude Desktop'
+  Ok "Claude Desktop instalado"
+}
+function AntigravityInstalled {
+  if(Has antigravity -or Has agy){ return $true }
+  if(WingetInstalled 'Google.Antigravity'){ return $true }
+  $paths = @(
+    (Join-Path $env:LOCALAPPDATA 'Programs\Antigravity'),
+    (Join-Path $env:LOCALAPPDATA 'Google\Antigravity'),
+    (Join-Path $env:ProgramFiles 'Google\Antigravity'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Google\Antigravity')
+  )
+  return @($paths | Where-Object { $_ -and (Test-Path -LiteralPath $_) }).Count -gt 0
+}
+function EnsureAntigravity {
+  if($SkipAntigravity){ return }
+  Step "Verificando Antigravity"
+  if(AntigravityInstalled){ Ok "Antigravity existente"; return }
+  InstallWingetPackage 'Google.Antigravity' 'Google Antigravity'
+  RefreshPath
+  Ok "Antigravity instalado"
+}
+function EnsureWindowsApps {
+  if($SkipDependencyInstall){ return }
+  EnsureNode
+  EnsureClaudeCodeCli
+  EnsureClaudeDesktop
+  EnsureAntigravity
 }
 
 function PackageRoot {
@@ -181,6 +271,24 @@ function ConfigureClaude {
   $s.env | Add-Member -Force -NotePropertyName CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY -NotePropertyValue 'true'
   $s | ConvertTo-Json -Depth 64 | Set-Content -LiteralPath $path -Encoding UTF8
   Ok "settings.json atualizado"
+}
+
+function ConfigureUserEnvironment {
+  Step "Configurando ambiente Windows para Claude CLI, Desktop e Antigravity"
+  $envs = @{
+    ANTHROPIC_BASE_URL = "http://127.0.0.1:$Port/v1"
+    ANTHROPIC_AUTH_TOKEN = 'dgsis-local-proxy'
+    ANTHROPIC_MODEL = $DefaultModel
+    CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = 'true'
+  }
+  foreach($name in $envs.Keys){
+    [Environment]::SetEnvironmentVariable($name, [string]$envs[$name], 'User')
+    Set-Item -Path "Env:$name" -Value ([string]$envs[$name])
+  }
+  $appDataRoot = if([string]::IsNullOrWhiteSpace($env:APPDATA)){ Join-Path $env:USERPROFILE 'AppData\Roaming' } else { $env:APPDATA }
+  AddUserPath (Join-Path $appDataRoot 'npm')
+  BroadcastEnvironmentChange
+  Ok "variaveis de usuario atualizadas"
 }
 
 function StopProxy { try{ Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 1 }catch{} }
@@ -220,15 +328,17 @@ function FinalTest {
 try{
   StartLog
   Write-Host "DGSIS Claude Code Installer" -ForegroundColor Green
+  ValidateWindows
   ValidateBaseUrl
   $clientToken = if($SelfTestOnly){ '' }else{ GetToken }
   if(-not $SelfTestOnly){ ValidateToken $clientToken }
   if($ValidateOnly){ Finish 0; return }
-  InstallDeps
+  EnsureWindowsApps
   if(-not $SelfTestOnly){
     $root=PackageRoot
     InstallProxy $root $clientToken
     ConfigureClaude
+    ConfigureUserEnvironment
     Autostart
     StartProxy
   }
@@ -239,6 +349,7 @@ try{
   Write-Host "Proxy: http://127.0.0.1:$Port/v1"
   Write-Host "Modelo: $DefaultModel"
   Write-Host "Abrir: claude"
+  Write-Host "Desktop/Antigravity: feche e abra novamente para herdar variaveis do Windows."
   Finish 0
 } catch {
   Write-Host ""
