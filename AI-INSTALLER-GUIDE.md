@@ -113,7 +113,8 @@ cx/gpt-5.5
 
 1. Confirmar token com cliente.
 2. Se aparecer erro 401 com `remote API access`, nao tentar trocar modelo nem reinstalar Claude Code. O token esta sem permissao de API remota.
-3. Rodar validação manual:
+3. No Windows, pedir o log mais recente em `%TEMP%\dgsis-claude-installer\install-*.log`.
+4. Rodar validação manual:
 
 Windows:
 
@@ -127,8 +128,8 @@ macOS:
 read -rsp "Token DGSIS: " TOKEN; echo
 ```
 
-4. Conferir se porta `8792` esta livre ou se o proxy esta rodando.
-5. Reexecutar instalador.
+5. Conferir se porta `8792` esta livre ou se o proxy esta rodando.
+6. Reexecutar instalador.
 
 ## Onde Ficam Arquivos
 

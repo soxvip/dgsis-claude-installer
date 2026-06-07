@@ -92,6 +92,16 @@ Pode rodar de novo para trocar token, atualizar proxy ou corrigir configuracao. 
 
 Se aparecer `Token DGSIS com formato valido, mas sem acesso remoto API`, o instalador esta correto e o token tambem pode parecer correto. O problema e permissao no gateway DGSIS: gere ou habilite um token de API remota para este cliente em `https://gtw.dgsis.com.br/v1`.
 
+## Logs No Windows
+
+O instalador Windows grava log em:
+
+```text
+%TEMP%\dgsis-claude-installer\install-*.log
+```
+
+Se o PowerShell fechar depois de erro, rode novamente com o comando normal. A versao atual nao fecha a sessao em `irm ... | iex` e mostra o caminho do log antes de encerrar.
+
 ## Seguranca
 
 Nunca coloque token real em GitHub, README ou print publico. Cada cliente deve usar token individual para facilitar revogacao.

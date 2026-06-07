@@ -4,6 +4,7 @@ param(
   [int]$Port = 8792,
   [switch]$SkipDependencyInstall,
   [switch]$NoAutoStart,
+  [switch]$NoPause,
   [switch]$SelfTestOnly
 )
 
@@ -12,6 +13,13 @@ $RepositoryZipUrl = "https://github.com/soxvip/dgsis-claude-installer/archive/re
 $InstallDir = Join-Path $env:LOCALAPPDATA "DGSIS\claude-code-proxy"
 $TaskName = "DGSIS Claude Code Proxy"
 $DefaultModel = "claude-opus-4-8"
+$RunningFromFile = -not [string]::IsNullOrWhiteSpace($PSCommandPath)
+$LogDir = Join-Path $env:TEMP "dgsis-claude-installer"
+$LogPath = Join-Path $LogDir ("install-" + (Get-Date -Format yyyyMMdd-HHmmss) + ".log")
+$LogShown = $false
+
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+try { Start-Transcript -Path $LogPath -Append -ErrorAction SilentlyContinue | Out-Null } catch {}
 
 function Step($m){ Write-Host ""; Write-Host "==> $m" -ForegroundColor Cyan }
 function Ok($m){ Write-Host "OK: $m" -ForegroundColor Green }
@@ -19,6 +27,17 @@ function Has($c){ return $null -ne (Get-Command $c -ErrorAction SilentlyContinue
 function RefreshPath { $env:Path = ([Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")) }
 function Plain($s){ $b=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); try{[Runtime.InteropServices.Marshal]::PtrToStringBSTR($b)}finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b)} }
 function NodeMajor { if(-not (Has node)){0}else{ [int]((& node -v).Trim().TrimStart('v').Split('.')[0]) } }
+function ShowLog { if(-not $script:LogShown){ Write-Host "Log: $LogPath"; $script:LogShown = $true } }
+function Finish($code){
+  ShowLog
+  try { Stop-Transcript | Out-Null } catch {}
+  if($RunningFromFile){ exit $code }
+  $global:LASTEXITCODE = $code
+}
+function PauseOnInteractiveFailure {
+  if($NoPause -or $Token.Trim()){ return }
+  try { [void](Read-Host -Prompt "Pressione Enter para fechar") } catch {}
+}
 
 function GetToken {
   if($Token.Trim()){ return (NormalizeToken $Token) }
@@ -192,8 +211,11 @@ try{
   Write-Host "Proxy: http://127.0.0.1:$Port/v1"
   Write-Host "Modelo: $DefaultModel"
   Write-Host "Abrir: claude"
+  Finish 0
 } catch {
   Write-Host ""
   Write-Host "Falha na instalacao: $($_.Exception.Message)" -ForegroundColor Red
-  exit 1
+  ShowLog
+  PauseOnInteractiveFailure
+  Finish 1
 }
