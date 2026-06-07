@@ -19,7 +19,7 @@ Gemini real e Haiku ficam ocultos por padrao porque falharam testes de estabilid
 Abra PowerShell e execute:
 
 ```powershell
-irm https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.ps1 | iex
+powershell -NoExit -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-RestMethod 'https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.ps1' | Invoke-Expression"
 ```
 
 O script sempre pede o token DGSIS individual do cliente no terminal.
@@ -90,7 +90,7 @@ Pode rodar de novo para trocar token, atualizar proxy ou corrigir configuracao. 
 
 ## Erro 401 No Token
 
-Se aparecer `Token DGSIS com formato valido, mas sem acesso remoto API`, o instalador esta correto e o token tambem pode parecer correto. O problema e permissao no gateway DGSIS: gere ou habilite um token de API remota para este cliente em `https://gtw.dgsis.com.br/v1`.
+Se aparecer `Token DGSIS recusado pelo gateway (401)`, o instalador esta correto e o token tambem pode parecer correto. O problema e permissao no gateway DGSIS: gere ou habilite um token de API remota para este cliente em `https://gtw.dgsis.com.br/v1`.
 
 ## Logs No Windows
 
@@ -100,7 +100,7 @@ O instalador Windows grava log em:
 %TEMP%\dgsis-claude-installer\install-*.log
 ```
 
-Se o PowerShell fechar depois de erro, rode novamente com o comando normal. A versao atual nao fecha a sessao em `irm ... | iex` e mostra o caminho do log antes de encerrar.
+Se o PowerShell fechar depois de erro, rode novamente com o comando Windows acima. Ele usa `-NoExit`, entao a janela fica aberta mesmo quando falha antes do instalador iniciar.
 
 ## Seguranca
 

@@ -5,21 +5,21 @@ param(
   [switch]$SkipDependencyInstall,
   [switch]$NoAutoStart,
   [switch]$NoPause,
+  [switch]$ExitOnComplete,
   [switch]$SelfTestOnly
 )
 
 $ErrorActionPreference = "Stop"
 $RepositoryZipUrl = "https://github.com/soxvip/dgsis-claude-installer/archive/refs/heads/main.zip"
-$InstallDir = Join-Path $env:LOCALAPPDATA "DGSIS\claude-code-proxy"
+$LocalAppDataRoot = if([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)){ Join-Path $env:USERPROFILE "AppData\Local" } else { $env:LOCALAPPDATA }
+$InstallDir = Join-Path $LocalAppDataRoot "DGSIS\claude-code-proxy"
 $TaskName = "DGSIS Claude Code Proxy"
 $DefaultModel = "claude-opus-4-8"
-$RunningFromFile = -not [string]::IsNullOrWhiteSpace($PSCommandPath)
-$LogDir = Join-Path $env:TEMP "dgsis-claude-installer"
+$TempRoot = if([string]::IsNullOrWhiteSpace($env:TEMP)){ [IO.Path]::GetTempPath() } else { $env:TEMP }
+$LogDir = Join-Path $TempRoot "dgsis-claude-installer"
 $LogPath = Join-Path $LogDir ("install-" + (Get-Date -Format yyyyMMdd-HHmmss) + ".log")
 $LogShown = $false
-
-New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-try { Start-Transcript -Path $LogPath -Append -ErrorAction SilentlyContinue | Out-Null } catch {}
+$TranscriptStarted = $false
 
 function Step($m){ Write-Host ""; Write-Host "==> $m" -ForegroundColor Cyan }
 function Ok($m){ Write-Host "OK: $m" -ForegroundColor Green }
@@ -27,11 +27,18 @@ function Has($c){ return $null -ne (Get-Command $c -ErrorAction SilentlyContinue
 function RefreshPath { $env:Path = ([Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")) }
 function Plain($s){ $b=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); try{[Runtime.InteropServices.Marshal]::PtrToStringBSTR($b)}finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b)} }
 function NodeMajor { if(-not (Has node)){0}else{ [int]((& node -v).Trim().TrimStart('v').Split('.')[0]) } }
+function StartLog {
+  try {
+    New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+    Start-Transcript -Path $LogPath -Append -ErrorAction SilentlyContinue | Out-Null
+    $script:TranscriptStarted = $true
+  } catch {}
+}
 function ShowLog { if(-not $script:LogShown){ Write-Host "Log: $LogPath"; $script:LogShown = $true } }
 function Finish($code){
   ShowLog
-  try { Stop-Transcript | Out-Null } catch {}
-  if($RunningFromFile){ exit $code }
+  if($script:TranscriptStarted){ try { Stop-Transcript | Out-Null } catch {} }
+  if($ExitOnComplete){ exit $code }
   $global:LASTEXITCODE = $code
 }
 function PauseOnInteractiveFailure {
@@ -192,6 +199,7 @@ function FinalTest {
 }
 
 try{
+  StartLog
   Write-Host "DGSIS Claude Code Installer" -ForegroundColor Green
   ValidateBaseUrl
   $clientToken = if($SelfTestOnly){ '' }else{ GetToken }

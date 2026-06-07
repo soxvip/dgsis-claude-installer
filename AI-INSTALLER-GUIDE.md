@@ -29,13 +29,15 @@ Abra PowerShell normal. Se winget ou Node exigirem permissao, abrir PowerShell c
 Comando padrao:
 
 ```powershell
-irm https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.ps1 | iex
+powershell -NoExit -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-RestMethod 'https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.ps1' | Invoke-Expression"
 ```
+
+Use este comando completo no Windows. Ele mantem a janela aberta se houver erro antes do token ou antes do instalador iniciar.
 
 Se precisar informar Base URL diferente:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.ps1))) -BaseUrl "https://gtw.dgsis.com.br/v1"
+powershell -NoExit -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; `$s=Invoke-RestMethod 'https://raw.githubusercontent.com/soxvip/dgsis-claude-installer/main/install.ps1'; & ([scriptblock]::Create(`$s)) -BaseUrl 'https://gtw.dgsis.com.br/v1'"
 ```
 
 Durante a instalacao, quando pedir token, o cliente deve colar o token individual.
